@@ -1,0 +1,245 @@
+#version 450 core
+
+// Robin Engine - 2D Simplex Noise Compute Shader
+// High-performance GPU-based Simplex noise generation with better visual quality than Perlin
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Output texture for noise values
+layout(rgba32f, binding = 0) uniform writeonly image2D noise_output;
+
+// Uniform parameters
+layout(binding = 1) uniform SimplexParams {
+    float frequency;
+    float amplitude;
+    int octaves;
+    float persistence;
+    float lacunarity;
+    vec2 offset;
+    uint seed;
+    float time;
+    float contrast;
+    float brightness;
+};
+
+// Permutation table for Simplex noise
+layout(binding = 2, std430) readonly buffer PermutationBuffer {
+    int permutation[512];
+};
+
+// 2D gradient vectors for simplex noise (using a hexagonal lattice)
+const vec2 gradients[8] = vec2[](
+    vec2(1.0, 1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(-1.0, -1.0),
+    vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0)
+);
+
+// Get gradient vector for hash value
+vec2 gradient_simplex(int hash_value) {
+    return gradients[hash_value & 7];
+}
+
+// Hash function for better distribution
+uint hash(uint x) {
+    x += (x << 10u);
+    x ^= (x >> 6u);
+    x += (x << 3u);
+    x ^= (x >> 11u);
+    x += (x << 15u);
+    return x;
+}
+
+// 2D simplex noise implementation
+float simplex_noise(vec2 pos) {
+    // Skewing factor for 2D simplex grid
+    const float F2 = 0.5 * (sqrt(3.0) - 1.0);
+    const float G2 = (3.0 - sqrt(3.0)) / 6.0;
+    
+    // Skew input space to determine which simplex cell we're in
+    float s = (pos.x + pos.y) * F2;
+    ivec2 i = ivec2(floor(pos + s));
+    float t = float(i.x + i.y) * G2;
+    
+    // Unskew the cell origin back to (x,y) space
+    vec2 origin = vec2(i) - t;
+    
+    // The x,y distances from the cell origin
+    vec2 diff0 = pos - origin;
+    
+    // Determine which simplex we are in
+    ivec2 offset1;
+    if (diff0.x > diff0.y) {
+        offset1 = ivec2(1, 0); // Lower triangle, XY order: (0,0)->(1,0)->(1,1)
+    } else {
+        offset1 = ivec2(0, 1); // Upper triangle, YX order: (0,0)->(0,1)->(1,1)
+    }
+    
+    // Offsets for middle and last vertices in (x,y) unskewed coords
+    vec2 diff1 = diff0 - vec2(offset1) + G2;
+    vec2 diff2 = diff0 - 1.0 + 2.0 * G2;
+    
+    // Calculate gradient indices
+    int gi0 = permutation[(i.x + permutation[i.y & 255]) & 255];
+    int gi1 = permutation[(i.x + offset1.x + permutation[(i.y + offset1.y) & 255]) & 255];
+    int gi2 = permutation[(i.x + 1 + permutation[(i.y + 1) & 255]) & 255];
+    
+    // Calculate noise contributions from each corner
+    float n0 = 0.0, n1 = 0.0, n2 = 0.0;
+    
+    // First corner
+    float t0 = 0.5 - dot(diff0, diff0);
+    if (t0 >= 0.0) {
+        t0 *= t0;
+        n0 = t0 * t0 * dot(gradient_simplex(gi0), diff0);
+    }
+    
+    // Second corner
+    float t1 = 0.5 - dot(diff1, diff1);
+    if (t1 >= 0.0) {
+        t1 *= t1;
+        n1 = t1 * t1 * dot(gradient_simplex(gi1), diff1);
+    }
+    
+    // Third corner
+    float t2 = 0.5 - dot(diff2, diff2);
+    if (t2 >= 0.0) {
+        t2 *= t2;
+        n2 = t2 * t2 * dot(gradient_simplex(gi2), diff2);
+    }
+    
+    // Sum contributions and scale to [-1, 1]
+    return 70.0 * (n0 + n1 + n2);
+}
+
+// Multi-octave fractal noise
+float fractal_simplex_noise(vec2 pos) {
+    float value = 0.0;
+    float current_amplitude = amplitude;
+    float current_frequency = frequency;
+    float max_value = 0.0;
+    
+    for (int i = 0; i < octaves && i < 8; i++) {
+        value += simplex_noise(pos * current_frequency) * current_amplitude;
+        max_value += current_amplitude;
+        
+        current_amplitude *= persistence;
+        current_frequency *= lacunarity;
+    }
+    
+    return value / max_value;
+}
+
+// Ridged simplex noise
+float ridged_simplex_noise(vec2 pos) {
+    float noise_value = fractal_simplex_noise(pos);
+    return 1.0 - abs(noise_value);
+}
+
+// Billow noise (absolute value of simplex)
+float billow_noise(vec2 pos) {
+    float value = 0.0;
+    float current_amplitude = amplitude;
+    float current_frequency = frequency;
+    float max_value = 0.0;
+    
+    for (int i = 0; i < octaves && i < 8; i++) {
+        value += abs(simplex_noise(pos * current_frequency)) * current_amplitude;
+        max_value += current_amplitude;
+        
+        current_amplitude *= persistence;
+        current_frequency *= lacunarity;
+    }
+    
+    return value / max_value;
+}
+
+// Warped noise for more complex patterns
+float warped_noise(vec2 pos) {
+    float warp_strength = 0.3;
+    vec2 warp = vec2(
+        fractal_simplex_noise(pos + vec2(5.2, 1.3)),
+        fractal_simplex_noise(pos + vec2(8.7, 4.6))
+    ) * warp_strength;
+    
+    return fractal_simplex_noise(pos + warp);
+}
+
+void main() {
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 image_size = imageSize(noise_output);
+    
+    // Check bounds
+    if (pixel_coord.x >= image_size.x || pixel_coord.y >= image_size.y) {
+        return;
+    }
+    
+    // Calculate normalized position
+    vec2 pos = vec2(pixel_coord) / vec2(image_size) + offset;
+    
+    // Add time-based animation with organic movement
+    vec2 animated_pos = pos + vec2(
+        sin(time * 0.08 + pos.y * 3.14159) * 0.05,
+        cos(time * 0.06 + pos.x * 2.71828) * 0.05
+    );
+    
+    // Generate different noise types based on seed
+    float noise_value;
+    uint noise_type = seed % 5;
+    
+    switch (noise_type) {
+        case 0:
+            noise_value = fractal_simplex_noise(animated_pos);
+            break;
+        case 1:
+            noise_value = ridged_simplex_noise(animated_pos);
+            break;
+        case 2:
+            noise_value = billow_noise(animated_pos);
+            break;
+        case 3:
+            noise_value = warped_noise(animated_pos);
+            break;
+        default:
+            // Marble pattern using simplex
+            noise_value = sin(animated_pos.x * 2.0 + fractal_simplex_noise(animated_pos * 2.0) * 3.0);
+            break;
+    }
+    
+    // Normalize to [0, 1] range
+    noise_value = (noise_value + 1.0) * 0.5;
+    
+    // Apply contrast and brightness
+    noise_value = ((noise_value - 0.5) * contrast + 0.5) + brightness;
+    noise_value = clamp(noise_value, 0.0, 1.0);
+    
+    // Create multi-channel output for different uses
+    vec4 output_color;
+    if (seed % 3 == 0) {
+        // Grayscale output
+        output_color = vec4(noise_value, noise_value, noise_value, 1.0);
+    } else if (seed % 3 == 1) {
+        // Color output using different frequencies for RGB
+        float r = fractal_simplex_noise(animated_pos * 1.1);
+        float g = fractal_simplex_noise(animated_pos * 1.3 + vec2(100.0, 50.0));
+        float b = fractal_simplex_noise(animated_pos * 0.9 + vec2(200.0, 150.0));
+        
+        output_color = vec4(
+            (r + 1.0) * 0.5,
+            (g + 1.0) * 0.5,
+            (b + 1.0) * 0.5,
+            1.0
+        );
+    } else {
+        // Packed data output (useful for normal maps)
+        float noise_dx = fractal_simplex_noise(animated_pos + vec2(0.01, 0.0)) - noise_value;
+        float noise_dy = fractal_simplex_noise(animated_pos + vec2(0.0, 0.01)) - noise_value;
+        
+        output_color = vec4(
+            noise_value,
+            (noise_dx + 1.0) * 0.5,
+            (noise_dy + 1.0) * 0.5,
+            1.0
+        );
+    }
+    
+    imageStore(noise_output, pixel_coord, output_color);
+}

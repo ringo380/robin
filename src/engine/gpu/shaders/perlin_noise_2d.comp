@@ -1,0 +1,133 @@
+#version 450 core
+
+// Robin Engine - 2D Perlin Noise Compute Shader
+// High-performance GPU-based Perlin noise generation
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Output texture for noise values
+layout(rgba32f, binding = 0) uniform writeonly image2D noise_output;
+
+// Uniform parameters
+layout(binding = 1) uniform NoiseParams {
+    float frequency;
+    float amplitude;
+    int octaves;
+    float persistence;
+    float lacunarity;
+    vec2 offset;
+    uint seed;
+    float time;
+};
+
+// Permutation table for Perlin noise
+layout(binding = 2, std430) readonly buffer PermutationBuffer {
+    int permutation[512];
+};
+
+// Hash function for pseudo-random values
+uint hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x85ebca6bU;
+    x ^= x >> 13;
+    x *= 0xc2b2ae35U;
+    x ^= x >> 16;
+    return x;
+}
+
+// Generate gradient vector
+vec2 gradient(int hash_value) {
+    // Use hash to select one of 8 gradient vectors
+    int h = hash_value & 7;
+    float u = h < 4 ? 1.0 : -1.0;
+    float v = (h & 2) == 0 ? 1.0 : -1.0;
+    
+    if ((h & 1) == 0) {
+        return vec2(u, v * 0.5);
+    } else {
+        return vec2(u * 0.5, v);
+    }
+}
+
+// Smooth interpolation function (6t^5 - 15t^4 + 10t^3)
+float smoothstep_perlin(float t) {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+// Single octave of Perlin noise
+float perlin_octave(vec2 pos) {
+    // Grid coordinates
+    ivec2 grid_pos = ivec2(floor(pos));
+    vec2 local_pos = fract(pos);
+    
+    // Get permutation indices
+    int aa = permutation[(permutation[grid_pos.x & 255] + grid_pos.y) & 255];
+    int ab = permutation[(permutation[grid_pos.x & 255] + grid_pos.y + 1) & 255];
+    int ba = permutation[(permutation[(grid_pos.x + 1) & 255] + grid_pos.y) & 255];
+    int bb = permutation[(permutation[(grid_pos.x + 1) & 255] + grid_pos.y + 1) & 255];
+    
+    // Get gradient vectors
+    vec2 grad_aa = gradient(aa);
+    vec2 grad_ab = gradient(ab);
+    vec2 grad_ba = gradient(ba);
+    vec2 grad_bb = gradient(bb);
+    
+    // Calculate dot products
+    float dot_aa = dot(grad_aa, local_pos);
+    float dot_ab = dot(grad_ab, local_pos - vec2(0.0, 1.0));
+    float dot_ba = dot(grad_ba, local_pos - vec2(1.0, 0.0));
+    float dot_bb = dot(grad_bb, local_pos - vec2(1.0, 1.0));
+    
+    // Smooth interpolation weights
+    float u = smoothstep_perlin(local_pos.x);
+    float v = smoothstep_perlin(local_pos.y);
+    
+    // Bilinear interpolation
+    float x1 = mix(dot_aa, dot_ba, u);
+    float x2 = mix(dot_ab, dot_bb, u);
+    return mix(x1, x2, v);
+}
+
+// Multi-octave fractal noise
+float fractal_noise(vec2 pos) {
+    float value = 0.0;
+    float current_amplitude = amplitude;
+    float current_frequency = frequency;
+    float max_value = 0.0;
+    
+    for (int i = 0; i < octaves && i < 8; i++) {
+        value += perlin_octave(pos * current_frequency) * current_amplitude;
+        max_value += current_amplitude;
+        
+        current_amplitude *= persistence;
+        current_frequency *= lacunarity;
+    }
+    
+    return value / max_value;
+}
+
+void main() {
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 image_size = imageSize(noise_output);
+    
+    // Check bounds
+    if (pixel_coord.x >= image_size.x || pixel_coord.y >= image_size.y) {
+        return;
+    }
+    
+    // Calculate normalized position
+    vec2 pos = vec2(pixel_coord) / vec2(image_size) + offset;
+    
+    // Add time-based animation
+    pos += vec2(sin(time * 0.1), cos(time * 0.15)) * 0.1;
+    
+    // Generate noise value
+    float noise_value = fractal_noise(pos);
+    
+    // Normalize to [0, 1] range
+    noise_value = (noise_value + 1.0) * 0.5;
+    
+    // Output RGBA (replicate noise value to all channels)
+    vec4 output_color = vec4(noise_value, noise_value, noise_value, 1.0);
+    imageStore(noise_output, pixel_coord, output_color);
+}

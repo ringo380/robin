@@ -1,0 +1,92 @@
+#version 450
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(set = 0, binding = 0, r8ui) uniform readonly uimage3D voxelData;
+layout(set = 0, binding = 1) buffer VertexBuffer {
+    vec4 vertices[];
+};
+layout(set = 0, binding = 2) buffer IndexBuffer {
+    uint indices[];
+};
+layout(set = 0, binding = 3) buffer CounterBuffer {
+    uint vertex_count;
+    uint index_count;
+};
+
+layout(set = 0, binding = 4) uniform MeshingParams {
+    ivec3 chunk_size;
+    float voxel_size;
+    vec3 chunk_offset;
+};
+
+const vec3 cube_vertices[8] = vec3[](
+    vec3(0.0, 0.0, 0.0),
+    vec3(1.0, 0.0, 0.0),
+    vec3(1.0, 1.0, 0.0),
+    vec3(0.0, 1.0, 0.0),
+    vec3(0.0, 0.0, 1.0),
+    vec3(1.0, 0.0, 1.0),
+    vec3(1.0, 1.0, 1.0),
+    vec3(0.0, 1.0, 1.0)
+);
+
+const uint cube_indices[36] = uint[](
+    0, 1, 2, 2, 3, 0,  // Front
+    1, 5, 6, 6, 2, 1,  // Right
+    5, 4, 7, 7, 6, 5,  // Back
+    4, 0, 3, 3, 7, 4,  // Left
+    3, 2, 6, 6, 7, 3,  // Top
+    4, 5, 1, 1, 0, 4   // Bottom
+);
+
+const ivec3 face_normals[6] = ivec3[](
+    ivec3(0, 0, 1),   // Front
+    ivec3(1, 0, 0),   // Right
+    ivec3(0, 0, -1),  // Back
+    ivec3(-1, 0, 0),  // Left
+    ivec3(0, 1, 0),   // Top
+    ivec3(0, -1, 0)   // Bottom
+);
+
+bool is_voxel_solid(ivec3 pos) {
+    if (pos.x < 0 || pos.y < 0 || pos.z < 0 ||
+        pos.x >= chunk_size.x || pos.y >= chunk_size.y || pos.z >= chunk_size.z) {
+        return false;
+    }
+    return imageLoad(voxelData, pos).r > 0;
+}
+
+void main() {
+    ivec3 coord = ivec3(gl_GlobalInvocationID);
+    
+    if (coord.x >= chunk_size.x || coord.y >= chunk_size.y || coord.z >= chunk_size.z) {
+        return;
+    }
+    
+    if (!is_voxel_solid(coord)) {
+        return;
+    }
+    
+    for (int face = 0; face < 6; face++) {
+        ivec3 neighbor_pos = coord + face_normals[face];
+        
+        if (!is_voxel_solid(neighbor_pos)) {
+            uint base_vertex_idx = atomicAdd(vertex_count, 4);
+            uint base_index_idx = atomicAdd(index_count, 6);
+            
+            vec3 world_pos = vec3(coord) * voxel_size + chunk_offset;
+            
+            for (int i = 0; i < 4; i++) {
+                int vertex_idx = face * 4 + i;
+                vec3 vertex_pos = world_pos + cube_vertices[vertex_idx] * voxel_size;
+                
+                vertices[base_vertex_idx + i] = vec4(vertex_pos, 1.0);
+            }
+            
+            for (int i = 0; i < 6; i++) {
+                indices[base_index_idx + i] = base_vertex_idx + cube_indices[face * 6 + i];
+            }
+        }
+    }
+}

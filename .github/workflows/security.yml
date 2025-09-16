@@ -1,0 +1,252 @@
+name: Security & Compliance Audit
+
+on:
+  schedule:
+    # Run security audit every day at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [ main ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ===== DEPENDENCY SECURITY AUDIT =====
+  dependency_audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    
+    - name: Run dependency audit
+      run: |
+        cargo audit
+        cargo audit --json > audit-report.json
+    
+    - name: Upload audit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-audit-report
+        path: audit-report.json
+
+  # ===== CODE VULNERABILITY SCAN =====
+  vulnerability_scan:
+    name: Code Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        override: true
+    
+    - name: Run security-focused clippy lints
+      run: |
+        cargo clippy --all-targets --all-features -- \
+          -W clippy::unwrap_used \
+          -W clippy::expect_used \
+          -W clippy::panic \
+          -W clippy::unimplemented \
+          -W clippy::todo \
+          -W clippy::mem_forget \
+          -W clippy::print_stdout \
+          -W clippy::print_stderr \
+          -D warnings
+    
+    - name: Check for unsafe code blocks
+      run: |
+        echo "🔍 Scanning for unsafe code blocks..."
+        if grep -r "unsafe" src/ --include="*.rs"; then
+          echo "⚠️  Unsafe code blocks found - manual security review required"
+        else
+          echo "✅ No unsafe code blocks found"
+        fi
+
+  # ===== SECRETS DETECTION =====
+  secrets_scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch full history for comprehensive scan
+    
+    - name: Install gitleaks
+      run: |
+        wget https://github.com/zricethezav/gitleaks/releases/download/v8.17.0/gitleaks_8.17.0_linux_x64.tar.gz
+        tar -xzf gitleaks_8.17.0_linux_x64.tar.gz
+        sudo mv gitleaks /usr/local/bin/
+    
+    - name: Run gitleaks scan
+      run: |
+        gitleaks detect --report-path gitleaks-report.json --verbose
+    
+    - name: Upload gitleaks report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: gitleaks-report
+        path: gitleaks-report.json
+
+  # ===== LICENSE COMPLIANCE CHECK =====
+  license_compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Install cargo-license
+      run: cargo install cargo-license
+    
+    - name: Check dependency licenses
+      run: |
+        echo "📋 Generating license report..."
+        cargo license --json > license-report.json
+        cargo license
+        
+        # Check for non-permissive licenses
+        if cargo license --json | grep -E '"GPL|AGPL|LGPL"'; then
+          echo "⚠️  Copyleft licenses detected - legal review required"
+          exit 1
+        else
+          echo "✅ All dependencies use permissive licenses"
+        fi
+    
+    - name: Upload license report
+      uses: actions/upload-artifact@v3
+      with:
+        name: license-report
+        path: license-report.json
+
+  # ===== EDUCATIONAL CONTENT SAFETY =====
+  content_safety:
+    name: Educational Content Safety Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check for inappropriate content
+      run: |
+        echo "🛡️  Scanning for inappropriate content in educational materials..."
+        
+        # Define patterns to search for
+        inappropriate_patterns="violence|weapon|drug|alcohol|gambling|profanity"
+        educational_files="*.md *.rs *.txt examples/* docs/*"
+        
+        # Search for patterns (case-insensitive)
+        if find . -name "*.md" -o -name "*.rs" -o -name "*.txt" | xargs grep -i -E "$inappropriate_patterns" | grep -v -E "(test|example|demo)" || true; then
+          echo "⚠️  Potentially inappropriate content found - manual review required"
+        else
+          echo "✅ Educational content safety check passed"
+        fi
+    
+    - name: Validate accessibility compliance
+      run: |
+        echo "♿ Checking accessibility compliance in documentation..."
+        
+        # Check for alt text in images, proper headings, etc.
+        if find . -name "*.md" | xargs grep -L "alt=" | head -5; then
+          echo "💡 Consider adding alt text to images for accessibility"
+        fi
+        
+        echo "✅ Accessibility review completed"
+
+  # ===== PRIVACY COMPLIANCE =====
+  privacy_audit:
+    name: Privacy & Data Protection Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Scan for data collection patterns
+      run: |
+        echo "🔒 Scanning for data collection and privacy patterns..."
+        
+        # Look for potential data collection
+        data_patterns="email|password|personal|collect|track|analytics|telemetry|cookies"
+        
+        if find src/ -name "*.rs" | xargs grep -i -E "$data_patterns" | head -10; then
+          echo "📋 Data handling patterns found - ensure privacy compliance"
+        else
+          echo "✅ No obvious data collection patterns detected"
+        fi
+    
+    - name: Check for GDPR/COPPA compliance references
+      run: |
+        echo "⚖️  Checking for privacy regulation compliance..."
+        
+        if find . -name "*.md" -o -name "*.rs" -o -name "*.txt" | xargs grep -i -E "gdpr|coppa|privacy|consent" | head -5; then
+          echo "✅ Privacy compliance references found"
+        else
+          echo "💡 Consider adding privacy compliance documentation"
+        fi
+
+  # ===== SECURITY SUMMARY REPORT =====
+  security_summary:
+    name: Security Summary Report
+    runs-on: ubuntu-latest
+    needs: [dependency_audit, vulnerability_scan, secrets_scan, license_compliance, content_safety, privacy_audit]
+    if: always()
+    
+    steps:
+    - name: Generate security summary
+      run: |
+        echo "🛡️  ROBIN ENGINE SECURITY AUDIT SUMMARY"
+        echo "====================================="
+        echo ""
+        echo "📊 Audit Results:"
+        echo "✅ Dependency Audit: ${{ needs.dependency_audit.result }}"
+        echo "✅ Vulnerability Scan: ${{ needs.vulnerability_scan.result }}"
+        echo "✅ Secrets Detection: ${{ needs.secrets_scan.result }}"
+        echo "✅ License Compliance: ${{ needs.license_compliance.result }}"
+        echo "✅ Content Safety: ${{ needs.content_safety.result }}"
+        echo "✅ Privacy Audit: ${{ needs.privacy_audit.result }}"
+        echo ""
+        
+        # Count successful vs failed jobs
+        success_count=0
+        if [ "${{ needs.dependency_audit.result }}" = "success" ]; then ((success_count++)); fi
+        if [ "${{ needs.vulnerability_scan.result }}" = "success" ]; then ((success_count++)); fi
+        if [ "${{ needs.secrets_scan.result }}" = "success" ]; then ((success_count++)); fi
+        if [ "${{ needs.license_compliance.result }}" = "success" ]; then ((success_count++)); fi
+        if [ "${{ needs.content_safety.result }}" = "success" ]; then ((success_count++)); fi
+        if [ "${{ needs.privacy_audit.result }}" = "success" ]; then ((success_count++)); fi
+        
+        echo "📈 Overall Security Score: $success_count/6 audits passed"
+        
+        if [ $success_count -eq 6 ]; then
+          echo "🎉 All security audits passed - Robin Engine is secure for educational deployment!"
+        else
+          echo "⚠️  Some security audits require attention - review failed jobs above"
+        fi

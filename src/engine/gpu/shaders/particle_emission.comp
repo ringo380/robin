@@ -1,0 +1,92 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer ParticleBuffer {
+    vec4 positions[];
+    vec4 velocities[];
+    vec4 colors[];
+    float lifetimes[];
+};
+
+layout(set = 0, binding = 1) buffer EmissionBuffer {
+    uint alive_count;
+    uint emission_count;
+    uint max_particles;
+};
+
+layout(set = 0, binding = 2) uniform EmissionParams {
+    vec3 emitter_position;
+    vec3 emitter_direction;
+    float emission_rate;
+    float particle_speed;
+    float particle_lifetime;
+    vec3 gravity;
+    float delta_time;
+    uint random_seed;
+};
+
+uint hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x85ebca6bu;
+    x ^= x >> 13;
+    x *= 0xc2b2ae35u;
+    x ^= x >> 16;
+    return x;
+}
+
+float random(uint seed) {
+    return float(hash(seed)) / float(0xffffffffu);
+}
+
+vec3 random_sphere_direction(uint seed) {
+    float u1 = random(seed);
+    float u2 = random(seed + 1u);
+    
+    float z = 2.0 * u1 - 1.0;
+    float r = sqrt(1.0 - z * z);
+    float phi = 2.0 * 3.14159265359 * u2;
+    
+    return vec3(r * cos(phi), r * sin(phi), z);
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    
+    if (index >= max_particles) {
+        return;
+    }
+    
+    if (lifetimes[index] <= 0.0) {
+        if (index < emission_count) {
+            uint seed = random_seed + index * 1000u;
+            
+            positions[index] = vec4(emitter_position, 1.0);
+            
+            vec3 random_dir = random_sphere_direction(seed);
+            vec3 direction = normalize(emitter_direction + random_dir * 0.3);
+            velocities[index] = vec4(direction * particle_speed, 0.0);
+            
+            float r = random(seed + 2u);
+            float g = random(seed + 3u);
+            float b = random(seed + 4u);
+            colors[index] = vec4(r, g, b, 1.0);
+            
+            lifetimes[index] = particle_lifetime;
+            
+            atomicAdd(alive_count, 1u);
+        }
+    } else {
+        positions[index].xyz += velocities[index].xyz * delta_time;
+        velocities[index].xyz += gravity * delta_time;
+        
+        lifetimes[index] -= delta_time;
+        
+        float life_ratio = lifetimes[index] / particle_lifetime;
+        colors[index].a = life_ratio;
+        
+        if (lifetimes[index] <= 0.0) {
+            atomicAdd(alive_count, -1u);
+        }
+    }
+}

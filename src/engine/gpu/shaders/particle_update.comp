@@ -1,0 +1,376 @@
+#version 450 core
+
+// Robin Engine - GPU Particle System Update Shader
+// High-performance particle simulation with physics, collisions, and effects
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Particle data structure
+struct Particle {
+    vec3 position;
+    float life;
+    vec3 velocity;
+    float max_life;
+    vec3 acceleration;
+    float size;
+    vec4 color;
+    vec3 angular_velocity;
+    float rotation;
+    uint flags; // Bit flags for particle state
+    float mass;
+    float drag;
+    float bounce;
+};
+
+// Particle buffers
+layout(binding = 0, std430) restrict buffer ParticleBuffer {
+    Particle particles[];
+};
+
+// Particle indices for active particles
+layout(binding = 1, std430) restrict buffer ActiveIndicesBuffer {
+    uint active_indices[];
+};
+
+// Dead particle indices for recycling
+layout(binding = 2, std430) restrict buffer DeadIndicesBuffer {
+    uint dead_indices[];
+};
+
+// Atomic counters
+layout(binding = 3, std430) restrict buffer CountersBuffer {
+    uint active_count;
+    uint dead_count;
+    uint spawn_count;
+    uint collision_count;
+};
+
+// Collision geometry (simple spheres and planes)
+struct CollisionSphere {
+    vec3 center;
+    float radius;
+    float restitution;
+    uint material_id;
+};
+
+struct CollisionPlane {
+    vec3 normal;
+    float distance;
+    float restitution;
+    uint material_id;
+};
+
+layout(binding = 4, std430) readonly buffer CollisionSpheresBuffer {
+    CollisionSphere collision_spheres[];
+};
+
+layout(binding = 5, std430) readonly buffer CollisionPlanesBuffer {
+    CollisionPlane collision_planes[];
+};
+
+// Force fields
+struct ForceField {
+    vec3 position;
+    float strength;
+    float radius;
+    uint type; // 0=point, 1=directional, 2=vortex, 3=noise
+    vec3 direction;
+    float falloff;
+};
+
+layout(binding = 6, std430) readonly buffer ForceFieldsBuffer {
+    ForceField force_fields[];
+};
+
+// Uniform parameters
+layout(binding = 7) uniform ParticleParams {
+    float delta_time;
+    vec3 gravity;
+    float global_drag;
+    vec3 wind;
+    float noise_strength;
+    float noise_frequency;
+    float noise_time;
+    uint max_particles;
+    uint sphere_count;
+    uint plane_count;
+    uint force_field_count;
+    float collision_damping;
+    float size_over_life_multiplier;
+    vec4 color_over_life_start;
+    vec4 color_over_life_end;
+};
+
+// Particle flags
+const uint PARTICLE_ACTIVE = 1u;
+const uint PARTICLE_COLLISION_ENABLED = 2u;
+const uint PARTICLE_AFFECTED_BY_FORCES = 4u;
+const uint PARTICLE_SIZE_OVER_LIFE = 8u;
+const uint PARTICLE_COLOR_OVER_LIFE = 16u;
+const uint PARTICLE_ROTATE = 32u;
+
+// Hash function for noise
+uint hash(uint x) {
+    x += (x << 10u);
+    x ^= (x >> 6u);
+    x += (x << 3u);
+    x ^= (x >> 11u);
+    x += (x << 15u);
+    return x;
+}
+
+// 3D noise function
+float noise3d(vec3 pos) {
+    ivec3 i = ivec3(floor(pos));
+    vec3 f = fract(pos);
+    
+    uint h000 = hash(uint(i.x) + uint(i.y) * 73u + uint(i.z) * 151u);
+    uint h001 = hash(uint(i.x) + uint(i.y) * 73u + uint(i.z + 1) * 151u);
+    uint h010 = hash(uint(i.x) + uint(i.y + 1) * 73u + uint(i.z) * 151u);
+    uint h011 = hash(uint(i.x) + uint(i.y + 1) * 73u + uint(i.z + 1) * 151u);
+    uint h100 = hash(uint(i.x + 1) + uint(i.y) * 73u + uint(i.z) * 151u);
+    uint h101 = hash(uint(i.x + 1) + uint(i.y) * 73u + uint(i.z + 1) * 151u);
+    uint h110 = hash(uint(i.x + 1) + uint(i.y + 1) * 73u + uint(i.z) * 151u);
+    uint h111 = hash(uint(i.x + 1) + uint(i.y + 1) * 73u + uint(i.z + 1) * 151u);
+    
+    float n000 = float(h000) / float(0xffffffffu) - 0.5;
+    float n001 = float(h001) / float(0xffffffffu) - 0.5;
+    float n010 = float(h010) / float(0xffffffffu) - 0.5;
+    float n011 = float(h011) / float(0xffffffffu) - 0.5;
+    float n100 = float(h100) / float(0xffffffffu) - 0.5;
+    float n101 = float(h101) / float(0xffffffffu) - 0.5;
+    float n110 = float(h110) / float(0xffffffffu) - 0.5;
+    float n111 = float(h111) / float(0xffffffffu) - 0.5;
+    
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    
+    float n00 = mix(n000, n100, u.x);
+    float n01 = mix(n001, n101, u.x);
+    float n10 = mix(n010, n110, u.x);
+    float n11 = mix(n011, n111, u.x);
+    
+    float n0 = mix(n00, n10, u.y);
+    float n1 = mix(n01, n11, u.y);
+    
+    return mix(n0, n1, u.z);
+}
+
+// Apply force fields to particle
+vec3 calculate_force_field_acceleration(uint particle_index, vec3 position) {
+    vec3 total_acceleration = vec3(0.0);
+    
+    for (uint i = 0; i < force_field_count; i++) {
+        ForceField field = force_fields[i];
+        vec3 to_field = field.position - position;
+        float distance = length(to_field);
+        
+        if (distance > field.radius) continue;
+        
+        vec3 direction;
+        float strength = field.strength;
+        
+        // Apply falloff
+        if (field.falloff > 0.0) {
+            strength *= pow(1.0 - (distance / field.radius), field.falloff);
+        }
+        
+        switch (field.type) {
+            case 0: // Point force (gravity/attraction)
+                direction = normalize(to_field);
+                break;
+                
+            case 1: // Directional force (wind)
+                direction = normalize(field.direction);
+                break;
+                
+            case 2: // Vortex force
+                vec3 axis = normalize(field.direction);
+                vec3 to_axis = to_field - dot(to_field, axis) * axis;
+                direction = normalize(cross(axis, normalize(to_axis)));
+                // Add inward spiral component
+                direction += normalize(to_axis) * -0.1;
+                break;
+                
+            case 3: // Noise force
+                vec3 noise_pos = position * noise_frequency + vec3(noise_time);
+                direction = vec3(
+                    noise3d(noise_pos),
+                    noise3d(noise_pos + vec3(100.0, 0.0, 0.0)),
+                    noise3d(noise_pos + vec3(0.0, 100.0, 0.0))
+                );
+                strength *= noise_strength;
+                break;
+                
+            default:
+                direction = vec3(0.0);
+                break;
+        }
+        
+        total_acceleration += direction * strength;
+    }
+    
+    return total_acceleration;
+}
+
+// Check collision with spheres
+bool check_sphere_collision(inout vec3 position, inout vec3 velocity, float particle_radius) {
+    bool collided = false;
+    
+    for (uint i = 0; i < sphere_count; i++) {
+        CollisionSphere sphere = collision_spheres[i];
+        vec3 to_particle = position - sphere.center;
+        float distance = length(to_particle);
+        float total_radius = sphere.radius + particle_radius;
+        
+        if (distance < total_radius && distance > 0.0) {
+            // Resolve collision
+            vec3 normal = normalize(to_particle);
+            float penetration = total_radius - distance;
+            
+            // Move particle out of sphere
+            position += normal * penetration;
+            
+            // Reflect velocity with restitution
+            float velocity_along_normal = dot(velocity, normal);
+            if (velocity_along_normal < 0.0) {
+                velocity -= normal * velocity_along_normal * (1.0 + sphere.restitution);
+                velocity *= collision_damping;
+            }
+            
+            collided = true;
+        }
+    }
+    
+    return collided;
+}
+
+// Check collision with planes
+bool check_plane_collision(inout vec3 position, inout vec3 velocity, float particle_radius) {
+    bool collided = false;
+    
+    for (uint i = 0; i < plane_count; i++) {
+        CollisionPlane plane = collision_planes[i];
+        float distance_to_plane = dot(position, plane.normal) - plane.distance;
+        
+        if (distance_to_plane < particle_radius) {
+            // Resolve collision
+            float penetration = particle_radius - distance_to_plane;
+            position += plane.normal * penetration;
+            
+            // Reflect velocity with restitution
+            float velocity_along_normal = dot(velocity, plane.normal);
+            if (velocity_along_normal < 0.0) {
+                velocity -= plane.normal * velocity_along_normal * (1.0 + plane.restitution);
+                velocity *= collision_damping;
+            }
+            
+            collided = true;
+        }
+    }
+    
+    return collided;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= max_particles) return;
+    
+    // Check if this particle index is active
+    if (index >= active_count) return;
+    uint particle_index = active_indices[index];
+    if (particle_index >= max_particles) return;
+    
+    Particle particle = particles[particle_index];
+    
+    // Skip inactive particles
+    if ((particle.flags & PARTICLE_ACTIVE) == 0) return;
+    
+    // Update life
+    particle.life -= delta_time;
+    if (particle.life <= 0.0) {
+        // Mark particle as dead
+        particle.flags &= ~PARTICLE_ACTIVE;
+        particles[particle_index] = particle;
+        
+        // Add to dead particles list
+        uint dead_index = atomicAdd(dead_count, 1);
+        if (dead_index < dead_indices.length()) {
+            dead_indices[dead_index] = particle_index;
+        }
+        return;
+    }
+    
+    // Calculate life ratio for over-life effects
+    float life_ratio = particle.life / particle.max_life;
+    float age_ratio = 1.0 - life_ratio;
+    
+    // Update size over life
+    if ((particle.flags & PARTICLE_SIZE_OVER_LIFE) != 0) {
+        particle.size *= (1.0 + size_over_life_multiplier * age_ratio);
+    }
+    
+    // Update color over life
+    if ((particle.flags & PARTICLE_COLOR_OVER_LIFE) != 0) {
+        particle.color = mix(color_over_life_end, color_over_life_start, life_ratio);
+    }
+    
+    // Calculate total acceleration
+    vec3 acceleration = particle.acceleration;
+    
+    // Add gravity
+    acceleration += gravity;
+    
+    // Add wind
+    acceleration += wind * (1.0 / particle.mass);
+    
+    // Add force fields
+    if ((particle.flags & PARTICLE_AFFECTED_BY_FORCES) != 0) {
+        acceleration += calculate_force_field_acceleration(particle_index, particle.position);
+    }
+    
+    // Add drag
+    vec3 drag_force = -particle.velocity * (global_drag + particle.drag);
+    acceleration += drag_force / particle.mass;
+    
+    // Add noise for organic movement
+    if (noise_strength > 0.0) {
+        vec3 noise_pos = particle.position * noise_frequency + vec3(noise_time);
+        vec3 noise_force = vec3(
+            noise3d(noise_pos),
+            noise3d(noise_pos + vec3(100.0)),
+            noise3d(noise_pos + vec3(200.0))
+        ) * noise_strength;
+        acceleration += noise_force;
+    }
+    
+    // Update velocity and position using Verlet integration
+    vec3 old_position = particle.position;
+    particle.velocity += acceleration * delta_time;
+    particle.position += particle.velocity * delta_time;
+    
+    // Handle collisions
+    if ((particle.flags & PARTICLE_COLLISION_ENABLED) != 0) {
+        bool collided = false;
+        
+        // Check sphere collisions
+        collided |= check_sphere_collision(particle.position, particle.velocity, particle.size * 0.5);
+        
+        // Check plane collisions
+        collided |= check_plane_collision(particle.position, particle.velocity, particle.size * 0.5);
+        
+        if (collided) {
+            atomicAdd(collision_count, 1);
+        }
+    }
+    
+    // Update rotation
+    if ((particle.flags & PARTICLE_ROTATE) != 0) {
+        particle.rotation += length(particle.angular_velocity) * delta_time;
+        
+        // Apply angular drag
+        particle.angular_velocity *= pow(0.98, delta_time * 60.0);
+    }
+    
+    // Store updated particle
+    particles[particle_index] = particle;
+}

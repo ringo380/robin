@@ -1,0 +1,100 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer InputBuffer {
+    uint input_data[];
+};
+
+layout(set = 0, binding = 1) buffer OutputBuffer {
+    uint output_data[];
+};
+
+layout(set = 0, binding = 2) buffer TempBuffer {
+    uint temp_data[];
+};
+
+layout(set = 0, binding = 3) uniform PrefixSumParams {
+    uint array_size;
+    uint pass_number;
+    uint group_size;
+    uint stride;
+};
+
+shared uint shared_data[128];
+
+void main() {
+    uint local_id = gl_LocalInvocationID.x;
+    uint group_id = gl_WorkGroupID.x;
+    uint global_id = gl_GlobalInvocationID.x;
+    
+    uint local_size = gl_WorkGroupSize.x;
+    
+    if (pass_number == 0) {
+        if (global_id * 2 < array_size) {
+            shared_data[local_id * 2] = input_data[global_id * 2];
+        } else {
+            shared_data[local_id * 2] = 0;
+        }
+        
+        if (global_id * 2 + 1 < array_size) {
+            shared_data[local_id * 2 + 1] = input_data[global_id * 2 + 1];
+        } else {
+            shared_data[local_id * 2 + 1] = 0;
+        }
+    } else {
+        if (global_id * 2 < array_size) {
+            shared_data[local_id * 2] = temp_data[global_id * 2];
+        } else {
+            shared_data[local_id * 2] = 0;
+        }
+        
+        if (global_id * 2 + 1 < array_size) {
+            shared_data[local_id * 2 + 1] = temp_data[global_id * 2 + 1];
+        } else {
+            shared_data[local_id * 2 + 1] = 0;
+        }
+    }
+    
+    barrier();
+    
+    for (uint d = 1; d < local_size * 2; d <<= 1) {
+        if (local_id < local_size / d) {
+            uint ai = d * (2 * local_id + 1) - 1;
+            uint bi = d * (2 * local_id + 2) - 1;
+            
+            if (bi < local_size * 2) {
+                shared_data[bi] += shared_data[ai];
+            }
+        }
+        barrier();
+    }
+    
+    if (local_id == 0) {
+        temp_data[group_id] = shared_data[local_size * 2 - 1];
+        shared_data[local_size * 2 - 1] = 0;
+    }
+    barrier();
+    
+    for (uint d = local_size; d > 0; d >>= 1) {
+        if (local_id < local_size / d) {
+            uint ai = d * (2 * local_id + 1) - 1;
+            uint bi = d * (2 * local_id + 2) - 1;
+            
+            if (bi < local_size * 2) {
+                uint temp = shared_data[ai];
+                shared_data[ai] = shared_data[bi];
+                shared_data[bi] += temp;
+            }
+        }
+        barrier();
+    }
+    
+    if (global_id * 2 < array_size) {
+        output_data[global_id * 2] = shared_data[local_id * 2];
+    }
+    
+    if (global_id * 2 + 1 < array_size) {
+        output_data[global_id * 2 + 1] = shared_data[local_id * 2 + 1];
+    }
+}

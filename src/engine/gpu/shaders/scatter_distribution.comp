@@ -1,0 +1,73 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0, r32f) uniform readonly image3D densityField;
+layout(set = 0, binding = 1) buffer ScatterPoints {
+    vec4 points[];
+    uint point_count;
+};
+
+layout(set = 0, binding = 2) uniform DistributionParams {
+    vec3 volume_size;
+    vec3 volume_offset;
+    float density_threshold;
+    float distribution_strength;
+    uint max_points;
+    uint random_seed;
+};
+
+uint hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x85ebca6bu;
+    x ^= x >> 13;
+    x *= 0xc2b2ae35u;
+    x ^= x >> 16;
+    return x;
+}
+
+float random(uint seed) {
+    return float(hash(seed)) / float(0xffffffffu);
+}
+
+vec3 sample_poisson_disk(vec3 center, float radius, uint seed) {
+    float angle = random(seed) * 6.28318530718;
+    float distance = sqrt(random(seed + 1u)) * radius;
+    float height = (random(seed + 2u) - 0.5) * radius;
+    
+    return center + vec3(
+        cos(angle) * distance,
+        height,
+        sin(angle) * distance
+    );
+}
+
+void main() {
+    ivec3 coord = ivec3(gl_GlobalInvocationID);
+    ivec3 size = imageSize(densityField);
+    
+    if (coord.x >= size.x || coord.y >= size.y || coord.z >= size.z) {
+        return;
+    }
+    
+    float density = imageLoad(densityField, coord).r;
+    
+    if (density > density_threshold) {
+        vec3 world_pos = (vec3(coord) / vec3(size)) * volume_size + volume_offset;
+        
+        uint base_seed = random_seed + coord.x * 73856093u + coord.y * 19349663u + coord.z * 83492791u;
+        
+        float spawn_probability = min(density * distribution_strength, 1.0);
+        float random_value = random(base_seed);
+        
+        if (random_value < spawn_probability) {
+            vec3 scatter_pos = sample_poisson_disk(world_pos, 0.5, base_seed + 1000u);
+            
+            uint point_index = atomicAdd(point_count, 1u);
+            
+            if (point_index < max_points) {
+                points[point_index] = vec4(scatter_pos, density);
+            }
+        }
+    }
+}

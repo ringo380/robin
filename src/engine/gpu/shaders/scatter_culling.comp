@@ -1,0 +1,72 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer readonly ScatterPoints {
+    vec4 points[];
+};
+
+layout(set = 0, binding = 1) buffer VisibleIndices {
+    uint visible_indices[];
+    uint visible_count;
+};
+
+layout(set = 0, binding = 2) uniform CullingParams {
+    mat4 view_projection_matrix;
+    vec4 frustum_planes[6];
+    vec3 camera_position;
+    float max_distance;
+    float lod_distance_threshold;
+    uint total_points;
+};
+
+bool is_point_in_frustum(vec3 point) {
+    for (int i = 0; i < 6; i++) {
+        float distance = dot(frustum_planes[i].xyz, point) + frustum_planes[i].w;
+        if (distance < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+float calculate_lod_factor(vec3 point, vec3 camera_pos) {
+    float distance = length(point - camera_pos);
+    
+    if (distance > max_distance) {
+        return 0.0;
+    }
+    
+    if (distance < lod_distance_threshold) {
+        return 1.0;
+    }
+    
+    return 1.0 - ((distance - lod_distance_threshold) / (max_distance - lod_distance_threshold));
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    
+    if (index >= total_points) {
+        return;
+    }
+    
+    vec3 point_pos = points[index].xyz;
+    float density = points[index].w;
+    
+    if (is_point_in_frustum(point_pos)) {
+        float lod_factor = calculate_lod_factor(point_pos, camera_position);
+        
+        if (lod_factor > 0.0) {
+            float visibility_threshold = 1.0 - lod_factor;
+            
+            if (density > visibility_threshold) {
+                uint visible_index = atomicAdd(visible_count, 1u);
+                
+                if (visible_index < visible_indices.length()) {
+                    visible_indices[visible_index] = index;
+                }
+            }
+        }
+    }
+}

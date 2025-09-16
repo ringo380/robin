@@ -1,0 +1,223 @@
+#version 450 core
+
+// Robin Engine - Voxel Marching Cubes Compute Shader
+// High-performance GPU-based mesh generation from voxel data using marching cubes
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+// Input voxel data
+layout(binding = 0, r32f) uniform readonly image3D voxel_data;
+
+// Output vertex buffer
+layout(binding = 1, std430) writeonly buffer VertexBuffer {
+    vec4 vertices[]; // xyz position + w for material ID
+};
+
+// Output index buffer
+layout(binding = 2, std430) writeonly buffer IndexBuffer {
+    uint indices[];
+};
+
+// Vertex counter (atomic)
+layout(binding = 3, std430) buffer VertexCounter {
+    uint vertex_count;
+    uint triangle_count;
+};
+
+// Uniform parameters
+layout(binding = 4) uniform MarchingParams {
+    float iso_level;
+    vec3 voxel_size;
+    vec3 world_offset;
+    float material_blend_factor;
+    int generate_normals;
+    int smooth_normals;
+};
+
+// Marching cubes lookup tables
+layout(binding = 5, std430) readonly buffer EdgeTable {
+    uint edge_table[256];
+};
+
+layout(binding = 6, std430) readonly buffer TriTable {
+    int tri_table[256 * 16]; // 256 cases, up to 15 triangles per case + terminator
+};
+
+// Edge vertex interpolation table
+const ivec3 edge_vertices[12] = ivec3[](
+    ivec3(0, 0, 0), ivec3(1, 0, 0), // Edge 0
+    ivec3(1, 0, 0), ivec3(1, 1, 0), // Edge 1
+    ivec3(1, 1, 0), ivec3(0, 1, 0), // Edge 2
+    ivec3(0, 1, 0), ivec3(0, 0, 0), // Edge 3
+    ivec3(0, 0, 1), ivec3(1, 0, 1), // Edge 4
+    ivec3(1, 0, 1), ivec3(1, 1, 1), // Edge 5
+    ivec3(1, 1, 1), ivec3(0, 1, 1), // Edge 6
+    ivec3(0, 1, 1), ivec3(0, 0, 1), // Edge 7
+    ivec3(0, 0, 0), ivec3(0, 0, 1), // Edge 8
+    ivec3(1, 0, 0), ivec3(1, 0, 1), // Edge 9
+    ivec3(1, 1, 0), ivec3(1, 1, 1), // Edge 10
+    ivec3(0, 1, 0), ivec3(0, 1, 1)  // Edge 11
+);
+
+// Sample voxel value at position
+float sample_voxel(ivec3 pos) {
+    ivec3 image_size = imageSize(voxel_data);
+    
+    // Clamp to valid range
+    pos = clamp(pos, ivec3(0), image_size - 1);
+    
+    return imageLoad(voxel_data, pos).r;
+}
+
+// Interpolate vertex position along edge
+vec3 interpolate_vertex(ivec3 pos1, ivec3 pos2, float val1, float val2) {
+    if (abs(iso_level - val1) < 0.00001) {
+        return vec3(pos1) * voxel_size + world_offset;
+    }
+    if (abs(iso_level - val2) < 0.00001) {
+        return vec3(pos2) * voxel_size + world_offset;
+    }
+    if (abs(val1 - val2) < 0.00001) {
+        return vec3(pos1) * voxel_size + world_offset;
+    }
+    
+    float mu = (iso_level - val1) / (val2 - val1);
+    vec3 pos = mix(vec3(pos1), vec3(pos2), mu);
+    return pos * voxel_size + world_offset;
+}
+
+// Calculate normal using central difference
+vec3 calculate_normal(ivec3 pos) {
+    vec3 gradient;
+    
+    gradient.x = sample_voxel(pos + ivec3(1, 0, 0)) - sample_voxel(pos - ivec3(1, 0, 0));
+    gradient.y = sample_voxel(pos + ivec3(0, 1, 0)) - sample_voxel(pos - ivec3(0, 1, 0));
+    gradient.z = sample_voxel(pos + ivec3(0, 0, 1)) - sample_voxel(pos - ivec3(0, 0, 1));
+    
+    return normalize(-gradient); // Negative because we want normals pointing outward
+}
+
+// Get material ID based on voxel values
+float get_material_id(float voxel_value, ivec3 pos) {
+    // Simple material assignment based on voxel value and position
+    if (voxel_value > 0.8) return 1.0; // Stone
+    if (voxel_value > 0.6) return 2.0; // Dirt
+    if (voxel_value > 0.4) return 3.0; // Grass
+    return 0.0; // Air/default
+}
+
+void main() {
+    ivec3 voxel_pos = ivec3(gl_GlobalInvocationID.xyz);
+    ivec3 image_size = imageSize(voxel_data);
+    
+    // Check bounds (leave 1 voxel border for sampling)
+    if (voxel_pos.x >= image_size.x - 1 || 
+        voxel_pos.y >= image_size.y - 1 || 
+        voxel_pos.z >= image_size.z - 1) {
+        return;
+    }
+    
+    // Sample the 8 corner values of the current cube
+    float cube_values[8];
+    cube_values[0] = sample_voxel(voxel_pos + ivec3(0, 0, 0));
+    cube_values[1] = sample_voxel(voxel_pos + ivec3(1, 0, 0));
+    cube_values[2] = sample_voxel(voxel_pos + ivec3(1, 1, 0));
+    cube_values[3] = sample_voxel(voxel_pos + ivec3(0, 1, 0));
+    cube_values[4] = sample_voxel(voxel_pos + ivec3(0, 0, 1));
+    cube_values[5] = sample_voxel(voxel_pos + ivec3(1, 0, 1));
+    cube_values[6] = sample_voxel(voxel_pos + ivec3(1, 1, 1));
+    cube_values[7] = sample_voxel(voxel_pos + ivec3(0, 1, 1));
+    
+    // Determine the index into the edge table based on which vertices are below the iso level
+    uint cube_index = 0;
+    for (int i = 0; i < 8; i++) {
+        if (cube_values[i] < iso_level) {
+            cube_index |= (1u << i);
+        }
+    }
+    
+    // Check if cube is entirely inside or outside the surface
+    if (edge_table[cube_index] == 0) {
+        return;
+    }
+    
+    // Calculate vertex positions for each edge that intersects the surface
+    vec3 edge_vertices_pos[12];
+    vec3 edge_normals[12];
+    float edge_materials[12];
+    
+    uint edges = edge_table[cube_index];
+    for (int i = 0; i < 12; i++) {
+        if ((edges & (1u << i)) != 0) {
+            int v1 = i * 2;      // First vertex of edge
+            int v2 = v1 + 1;     // Second vertex of edge
+            
+            // Get corner positions for this edge
+            ivec3 corner1 = voxel_pos + edge_vertices[v1];
+            ivec3 corner2 = voxel_pos + edge_vertices[v2];
+            
+            // Interpolate vertex position
+            edge_vertices_pos[i] = interpolate_vertex(corner1, corner2, cube_values[v1 / 2], cube_values[v2 / 2]);
+            
+            // Calculate normal if requested
+            if (generate_normals != 0) {
+                if (smooth_normals != 0) {
+                    // Interpolate normals from corners
+                    vec3 normal1 = calculate_normal(corner1);
+                    vec3 normal2 = calculate_normal(corner2);
+                    float mu = (iso_level - cube_values[v1 / 2]) / (cube_values[v2 / 2] - cube_values[v1 / 2]);
+                    edge_normals[i] = normalize(mix(normal1, normal2, mu));
+                } else {
+                    // Use face normal (calculated later)
+                    edge_normals[i] = vec3(0.0);
+                }
+            }
+            
+            // Interpolate material properties
+            float mat1 = get_material_id(cube_values[v1 / 2], corner1);
+            float mat2 = get_material_id(cube_values[v2 / 2], corner2);
+            float mu = (iso_level - cube_values[v1 / 2]) / (cube_values[v2 / 2] - cube_values[v1 / 2]);
+            edge_materials[i] = mix(mat1, mat2, mu);
+        }
+    }
+    
+    // Generate triangles
+    int tri_offset = int(cube_index) * 16;
+    for (int i = 0; tri_table[tri_offset + i] != -1; i += 3) {
+        // Get the three vertices for this triangle
+        int e1 = tri_table[tri_offset + i];
+        int e2 = tri_table[tri_offset + i + 1];
+        int e3 = tri_table[tri_offset + i + 2];
+        
+        // Calculate face normal if not using smooth normals
+        vec3 face_normal = vec3(0.0);
+        if (generate_normals != 0 && smooth_normals == 0) {
+            vec3 v1 = edge_vertices_pos[e1];
+            vec3 v2 = edge_vertices_pos[e2];
+            vec3 v3 = edge_vertices_pos[e3];
+            face_normal = normalize(cross(v2 - v1, v3 - v1));
+        }
+        
+        // Add vertices to buffer
+        uint base_vertex_idx = atomicAdd(vertex_count, 3);
+        if (base_vertex_idx + 2 < vertices.length()) {
+            // Vertex 1
+            vertices[base_vertex_idx] = vec4(edge_vertices_pos[e1], edge_materials[e1]);
+            
+            // Vertex 2
+            vertices[base_vertex_idx + 1] = vec4(edge_vertices_pos[e2], edge_materials[e2]);
+            
+            // Vertex 3
+            vertices[base_vertex_idx + 2] = vec4(edge_vertices_pos[e3], edge_materials[e3]);
+            
+            // Add indices
+            uint triangle_idx = atomicAdd(triangle_count, 1);
+            uint index_base = triangle_idx * 3;
+            if (index_base + 2 < indices.length()) {
+                indices[index_base] = base_vertex_idx;
+                indices[index_base + 1] = base_vertex_idx + 1;
+                indices[index_base + 2] = base_vertex_idx + 2;
+            }
+        }
+    }
+}

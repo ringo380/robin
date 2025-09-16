@@ -1,0 +1,71 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer readonly InputBuffer {
+    float input_data[];
+};
+
+layout(set = 0, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+layout(set = 0, binding = 2) uniform ReductionParams {
+    uint array_size;
+    uint operation_type; // 0 = sum, 1 = max, 2 = min, 3 = product
+    uint group_count;
+};
+
+shared float shared_data[128];
+
+float combine_operation(float a, float b, uint op) {
+    switch (op) {
+        case 0: return a + b;           // Sum
+        case 1: return max(a, b);       // Max
+        case 2: return min(a, b);       // Min
+        case 3: return a * b;           // Product
+        default: return a + b;          // Default to sum
+    }
+}
+
+float get_identity_value(uint op) {
+    switch (op) {
+        case 0: return 0.0;             // Sum identity
+        case 1: return -3.402823466e+38F; // Max identity (negative infinity)
+        case 2: return 3.402823466e+38F;  // Min identity (positive infinity)
+        case 3: return 1.0;             // Product identity
+        default: return 0.0;            // Default to sum identity
+    }
+}
+
+void main() {
+    uint local_id = gl_LocalInvocationID.x;
+    uint group_id = gl_WorkGroupID.x;
+    uint global_id = gl_GlobalInvocationID.x;
+    uint local_size = gl_WorkGroupSize.x;
+    
+    float identity = get_identity_value(operation_type);
+    
+    if (global_id < array_size) {
+        shared_data[local_id] = input_data[global_id];
+    } else {
+        shared_data[local_id] = identity;
+    }
+    
+    barrier();
+    
+    for (uint stride = local_size / 2; stride > 0; stride >>= 1) {
+        if (local_id < stride) {
+            shared_data[local_id] = combine_operation(
+                shared_data[local_id],
+                shared_data[local_id + stride],
+                operation_type
+            );
+        }
+        barrier();
+    }
+    
+    if (local_id == 0) {
+        output_data[group_id] = shared_data[0];
+    }
+}

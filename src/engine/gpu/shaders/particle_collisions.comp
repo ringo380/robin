@@ -1,0 +1,89 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer ParticlePositions {
+    vec4 positions[];
+};
+
+layout(set = 0, binding = 1) buffer ParticleVelocities {
+    vec4 velocities[];
+};
+
+layout(set = 0, binding = 2) buffer ParticleStates {
+    float lifetimes[];
+    float masses[];
+};
+
+layout(set = 0, binding = 3) buffer CollisionData {
+    uint collision_count;
+    uint collision_pairs[];
+};
+
+layout(set = 0, binding = 4) uniform CollisionParams {
+    float particle_radius;
+    float restitution;
+    float friction;
+    float damping;
+    uint max_particles;
+    float delta_time;
+};
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    
+    if (index >= max_particles || lifetimes[index] <= 0.0) {
+        return;
+    }
+    
+    vec3 pos_a = positions[index].xyz;
+    vec3 vel_a = velocities[index].xyz;
+    float mass_a = masses[index];
+    
+    for (uint i = index + 1; i < max_particles; i++) {
+        if (lifetimes[i] <= 0.0) {
+            continue;
+        }
+        
+        vec3 pos_b = positions[i].xyz;
+        vec3 diff = pos_a - pos_b;
+        float distance = length(diff);
+        
+        if (distance < particle_radius * 2.0 && distance > 0.0) {
+            vec3 normal = normalize(diff);
+            
+            float separation = particle_radius * 2.0 - distance;
+            vec3 correction = normal * separation * 0.5;
+            
+            positions[index].xyz += correction;
+            positions[i].xyz -= correction;
+            
+            vec3 vel_b = velocities[i].xyz;
+            float mass_b = masses[i];
+            
+            vec3 relative_velocity = vel_a - vel_b;
+            float velocity_along_normal = dot(relative_velocity, normal);
+            
+            if (velocity_along_normal > 0.0) {
+                continue;
+            }
+            
+            float e = restitution;
+            float j = -(1.0 + e) * velocity_along_normal;
+            j /= (1.0 / mass_a + 1.0 / mass_b);
+            
+            vec3 impulse = j * normal;
+            
+            velocities[index].xyz += impulse / mass_a;
+            velocities[i].xyz -= impulse / mass_b;
+            
+            uint collision_idx = atomicAdd(collision_count, 1u);
+            if (collision_idx * 2 + 1 < collision_pairs.length()) {
+                collision_pairs[collision_idx * 2] = index;
+                collision_pairs[collision_idx * 2 + 1] = i;
+            }
+        }
+    }
+    
+    velocities[index].xyz *= (1.0 - damping * delta_time);
+}
