@@ -19,7 +19,7 @@ pub mod gpu;
 pub mod rendering;
 pub mod platform;
 pub mod ai;
-pub mod ai_advanced;
+pub mod ai_game;
 pub mod ai_systems;
 pub mod character;
 pub mod immersive;
