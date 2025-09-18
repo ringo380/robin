@@ -4,9 +4,9 @@ use crate::engine::{
     logging::PerformanceMetrics,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock, atomic::{AtomicUsize, AtomicU64, AtomicU32, Ordering}},
     time::{Duration, Instant, SystemTime},
     fs,
 };
@@ -24,7 +24,7 @@ pub struct AssetPipeline {
     watchers: Arc<Mutex<Vec<PathBuf>>>,
 }
 
-/// Pipeline configuration
+/// Pipeline configuration with performance optimization settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineConfig {
     pub source_dir: PathBuf,
@@ -33,13 +33,19 @@ pub struct PipelineConfig {
     pub temp_dir: PathBuf,
     pub parallel_builds: usize,
     pub cache_enabled: bool,
+    pub cache_size_bytes: Option<usize>,
     pub compression_enabled: bool,
+    pub memory_mapped_io: bool,
+    pub streaming_threshold: usize, // Files larger than this use streaming
+    pub batch_size: usize, // Number of assets to process in parallel batches
     pub optimization_level: OptimizationLevel,
     pub target_platforms: Vec<TargetPlatform>,
     pub build_on_change: bool,
     pub incremental_builds: bool,
     pub validation_enabled: bool,
     pub asset_bundling: BundlingConfig,
+    pub performance_monitoring: bool,
+    pub thread_pool_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,14 +95,19 @@ pub enum CompressionFormat {
 
 impl Default for PipelineConfig {
     fn default() -> Self {
+        let cpu_count = num_cpus::get();
         Self {
             source_dir: PathBuf::from("assets/src"),
             output_dir: PathBuf::from("assets/built"),
             cache_dir: PathBuf::from("assets/cache"),
             temp_dir: PathBuf::from("assets/temp"),
-            parallel_builds: num_cpus::get(),
+            parallel_builds: cpu_count,
             cache_enabled: true,
+            cache_size_bytes: Some(256 * 1024 * 1024), // 256MB cache
             compression_enabled: true,
+            memory_mapped_io: true,
+            streaming_threshold: 50 * 1024 * 1024, // 50MB
+            batch_size: cpu_count * 2,
             optimization_level: OptimizationLevel::Basic,
             target_platforms: vec![TargetPlatform::Desktop],
             build_on_change: true,
@@ -109,6 +120,8 @@ impl Default for PipelineConfig {
                 bundle_by_scene: false,
                 compression_format: CompressionFormat::Zstd,
             },
+            performance_monitoring: true,
+            thread_pool_size: Some(cpu_count),
         }
     }
 }
@@ -173,17 +186,26 @@ pub struct ProcessedAssetMetadata {
 /// Asset cache system
 struct AssetCache {
     entries: HashMap<String, CacheEntry>,
+    lru_queue: VecDeque<String>,
     max_size: usize,
-    current_size: usize,
+    current_size: AtomicUsize,
+    hit_count: AtomicU64,
+    miss_count: AtomicU64,
+    memory_pool: Vec<u8>,
+    compression_enabled: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct CacheEntry {
     key: String,
     path: PathBuf,
     metadata: ProcessedAssetMetadata,
     last_accessed: SystemTime,
-    access_count: u32,
+    access_count: AtomicU32,
+    data: Vec<u8>,
+    compressed_data: Option<Vec<u8>>,
+    memory_size: usize,
+    compression_ratio: f32,
 }
 
 /// Dependency tracking
@@ -201,12 +223,16 @@ impl Default for DependencyGraph {
     }
 }
 
-/// Build queue for processing assets
+/// High-performance parallel build queue with work stealing
 struct BuildQueue {
-    pending: Vec<BuildJob>,
+    pending: VecDeque<BuildJob>,
+    high_priority: VecDeque<BuildJob>,
     processing: HashMap<PathBuf, BuildJob>,
     completed: Vec<BuildResult>,
     failed: Vec<BuildResult>,
+    thread_pool: rayon::ThreadPool,
+    active_workers: AtomicUsize,
+    total_jobs_processed: AtomicU64,
 }
 
 #[derive(Debug, Clone)]
@@ -286,22 +312,34 @@ impl AssetPipeline {
         }
 
         let mut pipeline = Self {
-            config,
+            config: config.clone(),
             processors: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(RwLock::new(AssetCache {
                 entries: HashMap::new(),
-                max_size: 100 * 1024 * 1024, // 100MB cache
-                current_size: 0,
+                lru_queue: VecDeque::new(),
+                max_size: config.cache_size_bytes.unwrap_or(100 * 1024 * 1024), // 100MB default
+                current_size: AtomicUsize::new(0),
+                hit_count: AtomicU64::new(0),
+                miss_count: AtomicU64::new(0),
+                memory_pool: Vec::new(),
+                compression_enabled: config.compression_enabled,
             })),
             dependency_graph: Arc::new(RwLock::new(DependencyGraph {
                 dependencies: HashMap::new(),
                 dependents: HashMap::new(),
             })),
             build_queue: Arc::new(Mutex::new(BuildQueue {
-                pending: Vec::new(),
+                pending: std::collections::VecDeque::new(),
+                high_priority: std::collections::VecDeque::new(),
                 processing: HashMap::new(),
                 completed: Vec::new(),
                 failed: Vec::new(),
+                thread_pool: rayon::ThreadPoolBuilder::new()
+                    .num_threads(config.thread_pool_size.unwrap_or(4))
+                    .build()
+                    .unwrap(),
+                active_workers: std::sync::atomic::AtomicUsize::new(0),
+                total_jobs_processed: std::sync::atomic::AtomicU64::new(0),
             })),
             statistics: Arc::new(Mutex::new(PipelineStatistics::default())),
             watchers: Arc::new(Mutex::new(Vec::new())),
@@ -323,8 +361,14 @@ impl AssetPipeline {
             cache_dir: temp_dir.join("cache"),
             temp_dir: temp_dir.join("temp"),
             parallel_builds: 1,
+            thread_pool_size: Some(1),
+            performance_monitoring: false,
             cache_enabled: false,
+            cache_size_bytes: Some(100 * 1024 * 1024), // 100MB default
             compression_enabled: false,
+            memory_mapped_io: false,
+            streaming_threshold: 1024 * 1024, // 1MB
+            batch_size: 10,
             optimization_level: OptimizationLevel::None,
             target_platforms: vec![],
             build_on_change: false,
@@ -332,21 +376,35 @@ impl AssetPipeline {
             validation_enabled: false,
             asset_bundling: BundlingConfig::default(),
         };
-        
+
+        let thread_pool_size = config.thread_pool_size.unwrap_or(4);
+
         Self {
             config,
             processors: Arc::new(RwLock::new(HashMap::new())),
             cache: Arc::new(RwLock::new(AssetCache {
                 entries: HashMap::new(),
+                lru_queue: std::collections::VecDeque::new(),
                 max_size: 0,
-                current_size: 0,
+                current_size: std::sync::atomic::AtomicUsize::new(0),
+                hit_count: std::sync::atomic::AtomicU64::new(0),
+                miss_count: std::sync::atomic::AtomicU64::new(0),
+                memory_pool: Vec::new(),
+                compression_enabled: false,
             })),
             dependency_graph: Arc::new(RwLock::new(DependencyGraph::default())),
             build_queue: Arc::new(Mutex::new(BuildQueue {
-                pending: Vec::new(),
+                pending: std::collections::VecDeque::new(),
+                high_priority: std::collections::VecDeque::new(),
                 processing: HashMap::new(),
                 completed: Vec::new(),
                 failed: Vec::new(),
+                thread_pool: rayon::ThreadPoolBuilder::new()
+                    .num_threads(thread_pool_size)
+                    .build()
+                    .unwrap(),
+                active_workers: std::sync::atomic::AtomicUsize::new(0),
+                total_jobs_processed: std::sync::atomic::AtomicU64::new(0),
             })),
             statistics: Arc::new(Mutex::new(PipelineStatistics::default())),
             watchers: Arc::new(Mutex::new(Vec::new())),
@@ -490,7 +548,7 @@ impl AssetPipeline {
         {
             let mut cache = self.cache.write().unwrap();
             cache.entries.clear();
-            cache.current_size = 0;
+            cache.current_size.store(0, std::sync::atomic::Ordering::SeqCst);
         }
 
         // Remove output directory
@@ -610,13 +668,121 @@ impl AssetPipeline {
         Ok(output_path)
     }
 
-    fn check_cache(&self, _path: &Path) -> AssetResult<Option<ProcessingOutput>> {
-        // Cache implementation would check if the asset is cached and up-to-date
-        Ok(None) // For now, always miss cache
+    /// Check cache with advanced LRU management and compression
+    fn check_cache(&self, path: &Path) -> AssetResult<Option<ProcessingOutput>> {
+        if !self.config.cache_enabled {
+            return Ok(None);
+        }
+
+        let mut cache = self.cache.write().unwrap();
+        let cache_key = self.generate_cache_key(path)?;
+
+        // First check if entry exists and is valid (without mutable borrow)
+        let should_use_cache = if let Some(entry) = cache.entries.get(&cache_key) {
+            let metadata = fs::metadata(path)?;
+            let file_modified = metadata.modified()?;
+            file_modified <= entry.metadata.created_at.into()
+        } else {
+            false
+        };
+
+        if should_use_cache {
+            // Update cache statistics
+            cache.hit_count.fetch_add(1, Ordering::Relaxed);
+
+            // Move to front of LRU queue
+            if let Some(pos) = cache.lru_queue.iter().position(|k| k == &cache_key) {
+                cache.lru_queue.remove(pos);
+            }
+            cache.lru_queue.push_front(cache_key.clone());
+
+            // Now get mutable access to update entry stats
+            if let Some(entry) = cache.entries.get_mut(&cache_key) {
+                entry.last_accessed = SystemTime::now();
+                entry.access_count.fetch_add(1, Ordering::Relaxed);
+
+                // Return cached data (decompress if needed)
+                if !entry.data.is_empty() {
+                    let data = &entry.data;
+                    let output = ProcessingOutput {
+                        output_path: entry.metadata.processed_path.clone(),
+                        processed_data: data.clone(),
+                        metadata: entry.metadata.clone(),
+                        dependencies: entry.metadata.dependencies.iter()
+                            .map(|d| PathBuf::from(d))
+                            .collect(),
+                        warnings: Vec::new(),
+                    };
+                    return Ok(Some(output));
+                } else if let Some(ref compressed_data) = entry.compressed_data {
+                    // Decompress data
+                    let decompressed = self.decompress_data(compressed_data)?;
+                    let output = ProcessingOutput {
+                        output_path: entry.metadata.processed_path.clone(),
+                        processed_data: decompressed,
+                        metadata: entry.metadata.clone(),
+                        dependencies: entry.metadata.dependencies.iter()
+                            .map(|d| PathBuf::from(d))
+                            .collect(),
+                        warnings: Vec::new(),
+                    };
+                    return Ok(Some(output));
+                }
+            }
+        }
+
+        // Cache miss
+        cache.miss_count.fetch_add(1, Ordering::Relaxed);
+        Ok(None)
     }
 
-    fn update_cache(&self, _path: &Path, _output: &ProcessingOutput) -> AssetResult<()> {
-        // Cache implementation would store the processed asset
+    /// Update cache with smart compression and eviction
+    fn update_cache(&self, path: &Path, output: &ProcessingOutput) -> AssetResult<()> {
+        if !self.config.cache_enabled {
+            return Ok(());
+        }
+
+        let mut cache = self.cache.write().unwrap();
+        let cache_key = self.generate_cache_key(path)?;
+
+        // Prepare data for caching
+        let data_size = output.processed_data.len();
+        let (cached_data, compressed_data, compression_ratio) = if cache.compression_enabled && data_size > 1024 {
+            // Compress large assets
+            let compressed = self.compress_data(&output.processed_data)?;
+            let ratio = data_size as f32 / compressed.len() as f32;
+            if ratio > 1.2 { // Only cache compressed if we get good compression
+                (None, Some(compressed), ratio)
+            } else {
+                (Some(output.processed_data.clone()), None, 1.0)
+            }
+        } else {
+            (Some(output.processed_data.clone()), None, 1.0)
+        };
+
+        let cache_size = compressed_data.as_ref().map(|d| d.len()).unwrap_or(data_size);
+
+        // Evict old entries if cache is full
+        self.evict_if_needed(&mut cache, cache_size);
+
+        // Create cache entry
+        let entry = CacheEntry {
+            key: cache_key.clone(),
+            path: path.to_path_buf(),
+            metadata: output.metadata.clone(),
+            data: cached_data.unwrap_or_default(),
+            compressed_data,
+            last_accessed: SystemTime::now(),
+            access_count: AtomicU32::new(1),
+            memory_size: cache_size,
+            compression_ratio,
+        };
+
+        // Update cache
+        cache.entries.insert(cache_key.clone(), entry);
+        cache.lru_queue.push_front(cache_key);
+        cache.current_size.fetch_add(cache_size, Ordering::Relaxed);
+
         Ok(())
     }
 
@@ -677,6 +843,66 @@ impl AssetPipeline {
 
     pub fn update(&mut self) -> AssetResult<()> {
         // Update pipeline state
+        Ok(())
+    }
+
+    /// Generate a cache key for the given path
+    fn generate_cache_key(&self, path: &Path) -> AssetResult<String> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        path.hash(&mut hasher);
+        Ok(format!("{:x}", hasher.finish()))
+    }
+
+    /// Compress data for cache storage
+    fn compress_data(&self, data: &[u8]) -> AssetResult<Vec<u8>> {
+        if !self.config.compression_enabled {
+            return Ok(data.to_vec());
+        }
+
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data)
+            .map_err(|e| AssetError::LoadFailed(format!("Compression failed: {}", e)))?;
+        encoder.finish()
+            .map_err(|e| AssetError::LoadFailed(format!("Compression finish failed: {}", e)))
+    }
+
+    /// Decompress data from cache
+    fn decompress_data(&self, compressed_data: &[u8]) -> AssetResult<Vec<u8>> {
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+
+        let mut decoder = GzDecoder::new(compressed_data);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)
+            .map_err(|e| AssetError::LoadFailed(format!("Decompression failed: {}", e)))?;
+        Ok(decompressed)
+    }
+
+    /// Evict cache entries if needed to stay within size limits
+    fn evict_if_needed(&self, cache: &mut AssetCache, new_entry_size: usize) -> AssetResult<()> {
+        let max_size = cache.max_size;
+        let current_size = cache.current_size.load(Ordering::Relaxed);
+
+        if current_size + new_entry_size > max_size {
+            // Remove least recently used entries
+            while !cache.lru_queue.is_empty() &&
+                  cache.current_size.load(Ordering::Relaxed) + new_entry_size > max_size {
+                if let Some(key) = cache.lru_queue.pop_back() {
+                    if let Some(entry) = cache.entries.remove(&key) {
+                        let entry_size = entry.data.len() +
+                                       entry.compressed_data.as_ref().map(|d| d.len()).unwrap_or(0);
+                        cache.current_size.fetch_sub(entry_size, Ordering::Relaxed);
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }

@@ -468,18 +468,18 @@ enum Face {
 fn get_visible_faces(x: i32, y: i32, z: i32) -> Vec<Face> {
     let mut faces = Vec::new();
     let surface_height = generate_terrain_height(x as f32, z as f32) as i32;
-    
+
     // Only generate faces for surface and near-surface voxels
     if y > surface_height + 2 || y < surface_height - 5 {
         return faces; // Skip voxels too far from surface
     }
-    
+
     let voxel_type = get_voxel_type(x as f32, y as f32, z as f32);
     if voxel_type as u8 == MaterialType::Air as u8 {
         return faces; // Skip air voxels
     }
-    
-    // Top face - always render for surface voxels
+
+    // Top face - always render for surface voxels, or if air above
     if y == surface_height {
         faces.push(Face::Top);
     } else {
@@ -488,26 +488,41 @@ fn get_visible_faces(x: i32, y: i32, z: i32) -> Vec<Face> {
             faces.push(Face::Top);
         }
     }
-    
-    // Side faces - only check air neighbors for efficiency
-    if get_voxel_type((x + 1) as f32, y as f32, z as f32) as u8 == MaterialType::Air as u8 {
+
+    // Side faces - check neighboring height to determine visibility
+    // East face (+X direction)
+    let neighbor_east_height = generate_terrain_height((x + 1) as f32, z as f32) as i32;
+    if get_voxel_type((x + 1) as f32, y as f32, z as f32) as u8 == MaterialType::Air as u8
+        || y > neighbor_east_height {
         faces.push(Face::East);
     }
-    if get_voxel_type((x - 1) as f32, y as f32, z as f32) as u8 == MaterialType::Air as u8 {
+
+    // West face (-X direction)
+    let neighbor_west_height = generate_terrain_height((x - 1) as f32, z as f32) as i32;
+    if get_voxel_type((x - 1) as f32, y as f32, z as f32) as u8 == MaterialType::Air as u8
+        || y > neighbor_west_height {
         faces.push(Face::West);
     }
-    if get_voxel_type(x as f32, y as f32, (z + 1) as f32) as u8 == MaterialType::Air as u8 {
+
+    // North face (+Z direction)
+    let neighbor_north_height = generate_terrain_height(x as f32, (z + 1) as f32) as i32;
+    if get_voxel_type(x as f32, y as f32, (z + 1) as f32) as u8 == MaterialType::Air as u8
+        || y > neighbor_north_height {
         faces.push(Face::North);
     }
-    if get_voxel_type(x as f32, y as f32, (z - 1) as f32) as u8 == MaterialType::Air as u8 {
+
+    // South face (-Z direction)
+    let neighbor_south_height = generate_terrain_height(x as f32, (z - 1) as f32) as i32;
+    if get_voxel_type(x as f32, y as f32, (z - 1) as f32) as u8 == MaterialType::Air as u8
+        || y > neighbor_south_height {
         faces.push(Face::South);
     }
-    
+
     // Bottom face - only for voxels with air below
     if get_voxel_type(x as f32, (y - 1) as f32, z as f32) as u8 == MaterialType::Air as u8 {
         faces.push(Face::Bottom);
     }
-    
+
     faces
 }
 

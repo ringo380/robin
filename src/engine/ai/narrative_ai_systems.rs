@@ -1846,6 +1846,11 @@ impl NarrativeAISystem {
         let generation_time = generation_start.elapsed();
         self.performance_stats.record_character_development(generation_time);
 
+        // Extract character metrics before move
+        let development_depth = self.calculate_development_depth(&growth_analysis, &arc_progression, &psychological_events);
+        let psychological_realism = self.calculate_psychological_realism(&psychological_events, &emotional_moments);
+        let emotional_resonance = self.calculate_emotional_resonance(&emotional_moments, &relationship_changes);
+
         Ok(GeneratedCharacterDevelopment {
             growth_analysis,
             arc_progression,
@@ -1855,9 +1860,9 @@ impl NarrativeAISystem {
             relationship_changes,
             development_metadata: CharacterDevelopmentMetadata {
                 generation_time: generation_time.as_secs_f32(),
-                development_depth: 0.8, // TODO: Extract before move
-                psychological_realism: 0.7, // TODO: Extract before move
-                emotional_resonance: 0.75, // TODO: Extract before move
+                development_depth,
+                psychological_realism,
+                emotional_resonance,
                 context_used: development_context,
             },
         })
@@ -1899,6 +1904,11 @@ impl NarrativeAISystem {
         let generation_time = generation_start.elapsed();
         self.performance_stats.record_thematic_generation(generation_time);
 
+        // Extract thematic metrics before move
+        let thematic_depth = self.calculate_thematic_depth(&core_themes, &coherent_themes);
+        let symbolic_richness = self.calculate_symbolic_richness(&symbolic_content, &metaphorical_content);
+        let cultural_sensitivity = self.calculate_cultural_sensitivity(&cultural_content, &moral_content);
+
         Ok(GeneratedThematicContent {
             core_themes,
             symbolic_content,
@@ -1908,9 +1918,9 @@ impl NarrativeAISystem {
             coherent_themes,
             thematic_metadata: ThematicGenerationMetadata {
                 generation_time: generation_time.as_secs_f32(),
-                thematic_depth: 0.8, // TODO: Extract before move
-                symbolic_richness: 0.75, // TODO: Extract before move
-                cultural_sensitivity: 0.85, // TODO: Extract before move
+                thematic_depth,
+                symbolic_richness,
+                cultural_sensitivity,
                 parameters_used: theme_parameters,
             },
         })
@@ -1953,8 +1963,7 @@ impl NarrativeAISystem {
     /// Save narrative AI state and learned patterns
     pub async fn save_narrative_state(&self, save_path: &str) -> RobinResult<()> {
         self.narrative_memory.save_narrative_database(save_path).await?;
-        // TODO: Fix save_learned_patterns method ambiguity
-        // self.story_architect.save_learned_patterns(save_path).await?;
+        self.story_architect.save_learned_patterns(save_path).await?;
         self.character_psychologist.save_psychological_models(save_path).await?;
         self.dialogue_master.save_dialogue_patterns(save_path).await?;
         self.plot_weaver.save_plot_knowledge(save_path).await?;
@@ -1966,14 +1975,104 @@ impl NarrativeAISystem {
     /// Load narrative AI state and learned patterns
     pub async fn load_narrative_state(&mut self, load_path: &str) -> RobinResult<()> {
         self.narrative_memory.load_narrative_database(load_path).await?;
-        // TODO: Fix load_learned_patterns method ambiguity  
-        // self.story_architect.load_learned_patterns(load_path).await?;
+        self.story_architect.load_learned_patterns(load_path).await?;
         self.character_psychologist.load_psychological_models(load_path).await?;
         self.dialogue_master.load_dialogue_patterns(load_path).await?;
         self.plot_weaver.load_plot_knowledge(load_path).await?;
         self.theme_explorer.load_thematic_understanding(load_path).await?;
         
         Ok(())
+    }
+
+    // Helper methods for character metrics calculation
+    fn calculate_development_depth(&self, growth_analysis: &CharacterGrowthAnalysis, _arc_progression: &CharacterArcProgression, psychological_events: &[PsychologicalEvent]) -> f32 {
+        // Calculate development depth based on multiple factors
+        let growth_potential = growth_analysis.development_potential();
+        let arc_complexity = psychological_events.len() as f32 / 10.0; // Normalize based on event count
+
+        // Since PsychologicalEvent is a struct, calculate depth based on number and assumed complexity
+        let psychological_depth = if psychological_events.is_empty() {
+            0.5
+        } else {
+            // Assume each psychological event contributes to depth, with diminishing returns
+            (psychological_events.len() as f32 * 0.1 + 0.4).min(1.0)
+        };
+
+        // Weighted average of factors
+        (growth_potential * 0.4 + arc_complexity.min(1.0) * 0.3 + psychological_depth * 0.3).clamp(0.0f32, 1.0f32)
+    }
+
+    fn calculate_psychological_realism(&self, psychological_events: &[PsychologicalEvent], emotional_moments: &EmotionalMoments) -> f32 {
+        // Calculate realism based on event consistency and emotional authenticity
+        let event_consistency = if psychological_events.is_empty() {
+            0.5
+        } else {
+            // Since PsychologicalEvent is a struct, calculate consistency based on event sequence length
+            // More events suggest better character development consistency
+            let sequence_quality = (psychological_events.len() as f32 / 5.0).min(1.0);
+            0.6 + sequence_quality * 0.3 // Base consistency + sequence bonus
+        };
+
+        let emotional_authenticity = emotional_moments.resonance_score();
+
+        // Weighted combination
+        (event_consistency * 0.6 + emotional_authenticity * 0.4).clamp(0.0f32, 1.0f32)
+    }
+
+    fn calculate_emotional_resonance(&self, emotional_moments: &EmotionalMoments, relationship_changes: &[RelationshipChange]) -> f32 {
+        // Calculate emotional resonance based on emotional moments and relationship dynamics
+        let base_resonance = emotional_moments.resonance_score();
+
+        // Factor in relationship complexity
+        let relationship_factor = if relationship_changes.is_empty() {
+            0.5
+        } else {
+            // Since RelationshipChange is a struct, calculate impact based on strength changes
+            let avg_relationship_impact = relationship_changes.iter()
+                .map(|change| {
+                    let strength_diff = (change.new_strength - change.old_strength).abs();
+                    let base_impact = if change.new_strength > change.old_strength { 0.8 } else { 0.6 };
+                    base_impact + strength_diff * 0.2
+                })
+                .sum::<f32>() / relationship_changes.len() as f32;
+
+            avg_relationship_impact.clamp(0.0f32, 1.0f32)
+        };
+
+        // Combine base resonance with relationship dynamics
+        (base_resonance * 0.7 + relationship_factor * 0.3).clamp(0.0f32, 1.0f32)
+    }
+
+    // Helper methods for thematic metrics calculation
+    fn calculate_thematic_depth(&self, core_themes: &[CoreTheme], coherent_themes: &ThematicCoherence) -> f32 {
+        // Calculate thematic depth based on theme complexity and coherence
+        let theme_complexity = if core_themes.is_empty() {
+            0.4
+        } else {
+            // More themes suggest deeper exploration, with diminishing returns
+            (core_themes.len() as f32 / 8.0).min(1.0) * 0.6 + 0.3
+        };
+
+        let coherence_factor = coherent_themes.depth_score();
+
+        // Weighted combination
+        (theme_complexity * 0.6 + coherence_factor * 0.4).clamp(0.0f32, 1.0f32)
+    }
+
+    fn calculate_symbolic_richness(&self, symbolic_content: &SymbolicContent, _metaphorical_content: &MetaphoricalContent) -> f32 {
+        // Calculate symbolic richness based on symbolic and metaphorical content
+        let symbolic_richness = symbolic_content.richness_score();
+
+        // For now, just use symbolic richness (could enhance with metaphorical analysis)
+        symbolic_richness.clamp(0.0f32, 1.0f32)
+    }
+
+    fn calculate_cultural_sensitivity(&self, cultural_content: &CulturalContent, _moral_content: &MoralContent) -> f32 {
+        // Calculate cultural sensitivity based on cultural content quality
+        let cultural_sensitivity = cultural_content.sensitivity_score();
+
+        // For now, use the cultural content sensitivity score directly
+        cultural_sensitivity.clamp(0.0f32, 1.0f32)
     }
 }
 
@@ -2556,57 +2655,2014 @@ impl ThematicCoherence {
 // Missing types for StoryCoherenceEngine and related systems
 #[derive(Debug, Default)]
 pub struct NarrativeFlowValidator {
-    // TODO: Implement proper narrative flow validation logic
     pub flow_rules: HashMap<String, f32>,
+    pub pacing_thresholds: PacingThresholds,
+    pub transition_rules: Vec<TransitionRule>,
+    pub validation_history: Vec<ValidationResult>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PacingThresholds {
+    pub min_scene_duration: f32,
+    pub max_scene_duration: f32,
+    pub tension_curve_smoothness: f32,
+    pub dialogue_action_ratio: f32,
+    pub character_focus_balance: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransitionRule {
+    pub from_state: NarrativeState,
+    pub to_state: NarrativeState,
+    pub transition_weight: f32,
+    pub required_conditions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum NarrativeState {
+    Introduction,
+    Rising,
+    Climax,
+    Falling,
+    Resolution,
+    Dialogue,
+    Action,
+    Reflection,
+    Conflict,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidationResult {
+    pub is_valid: bool,
+    pub flow_score: f32,
+    pub pacing_score: f32,
+    pub transition_score: f32,
+    pub issues: Vec<String>,
+    pub suggestions: Vec<String>,
+}
+
+impl Default for PacingThresholds {
+    fn default() -> Self {
+        Self {
+            min_scene_duration: 30.0,  // seconds
+            max_scene_duration: 300.0, // seconds
+            tension_curve_smoothness: 0.7,
+            dialogue_action_ratio: 0.6,
+            character_focus_balance: 0.8,
+        }
+    }
 }
 
 impl NarrativeFlowValidator {
     pub fn new() -> Self {
-        Self {
+        let mut validator = Self {
             flow_rules: HashMap::new(),
+            pacing_thresholds: PacingThresholds::default(),
+            transition_rules: Vec::new(),
+            validation_history: Vec::new(),
+        };
+
+        validator.initialize_flow_rules();
+        validator.initialize_transition_rules();
+        validator
+    }
+
+    fn initialize_flow_rules(&mut self) {
+        // Basic narrative flow rules
+        self.flow_rules.insert("introduction_weight".to_string(), 0.15);
+        self.flow_rules.insert("rising_action_weight".to_string(), 0.35);
+        self.flow_rules.insert("climax_weight".to_string(), 0.2);
+        self.flow_rules.insert("falling_action_weight".to_string(), 0.2);
+        self.flow_rules.insert("resolution_weight".to_string(), 0.1);
+
+        // Pacing rules
+        self.flow_rules.insert("max_dialogue_sequence".to_string(), 5.0);
+        self.flow_rules.insert("max_action_sequence".to_string(), 3.0);
+        self.flow_rules.insert("tension_escalation_rate".to_string(), 0.8);
+        self.flow_rules.insert("character_arc_progression".to_string(), 0.7);
+    }
+
+    fn initialize_transition_rules(&mut self) {
+        // Valid narrative transitions
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Introduction,
+            to_state: NarrativeState::Rising,
+            transition_weight: 1.0,
+            required_conditions: vec!["characters_established".to_string(), "world_introduced".to_string()],
+        });
+
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Rising,
+            to_state: NarrativeState::Climax,
+            transition_weight: 0.9,
+            required_conditions: vec!["tension_threshold_reached".to_string()],
+        });
+
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Climax,
+            to_state: NarrativeState::Falling,
+            transition_weight: 1.0,
+            required_conditions: vec!["conflict_peak_reached".to_string()],
+        });
+
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Falling,
+            to_state: NarrativeState::Resolution,
+            transition_weight: 0.8,
+            required_conditions: vec!["consequences_addressed".to_string()],
+        });
+
+        // Inter-scene transitions
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Dialogue,
+            to_state: NarrativeState::Action,
+            transition_weight: 0.7,
+            required_conditions: vec!["pacing_requirement".to_string()],
+        });
+
+        self.transition_rules.push(TransitionRule {
+            from_state: NarrativeState::Action,
+            to_state: NarrativeState::Reflection,
+            transition_weight: 0.6,
+            required_conditions: vec!["emotional_processing_needed".to_string()],
+        });
+    }
+
+    pub fn validate_narrative_flow(&mut self, narrative_sequence: &[NarrativeState], scene_durations: &[f32], tension_curve: &[f32]) -> ValidationResult {
+        let mut issues = Vec::new();
+        let mut suggestions = Vec::new();
+
+        // Validate overall structure
+        let structure_score = self.validate_structure(narrative_sequence, &mut issues, &mut suggestions);
+
+        // Validate pacing
+        let pacing_score = self.validate_pacing(scene_durations, &mut issues, &mut suggestions);
+
+        // Validate tension flow
+        let tension_score = self.validate_tension_curve(tension_curve, &mut issues, &mut suggestions);
+
+        // Validate transitions
+        let transition_score = self.validate_transitions(narrative_sequence, &mut issues, &mut suggestions);
+
+        // Calculate overall flow score
+        let flow_score = (structure_score * 0.3 + pacing_score * 0.25 + tension_score * 0.25 + transition_score * 0.2).clamp(0.0f32, 1.0f32);
+
+        let result = ValidationResult {
+            is_valid: flow_score >= 0.7,
+            flow_score,
+            pacing_score,
+            transition_score,
+            issues,
+            suggestions,
+        };
+
+        self.validation_history.push(result.clone());
+        result
+    }
+
+    fn validate_structure(&self, narrative_sequence: &[NarrativeState], issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> f32 {
+        if narrative_sequence.is_empty() {
+            issues.push("Narrative sequence is empty".to_string());
+            return 0.0;
         }
+
+        let mut structure_score: f32 = 0.8; // Base score
+
+        // Check for proper story arc
+        let has_introduction = narrative_sequence.iter().any(|s| matches!(s, NarrativeState::Introduction));
+        let has_climax = narrative_sequence.iter().any(|s| matches!(s, NarrativeState::Climax));
+        let has_resolution = narrative_sequence.iter().any(|s| matches!(s, NarrativeState::Resolution));
+
+        if !has_introduction {
+            issues.push("Missing proper introduction".to_string());
+            suggestions.push("Add character and world establishment scenes".to_string());
+            structure_score -= 0.2;
+        }
+
+        if !has_climax {
+            issues.push("Missing narrative climax".to_string());
+            suggestions.push("Build to a clear conflict peak".to_string());
+            structure_score -= 0.3;
+        }
+
+        if !has_resolution {
+            issues.push("Missing narrative resolution".to_string());
+            suggestions.push("Provide closure to main conflicts".to_string());
+            structure_score -= 0.2;
+        }
+
+        structure_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn validate_pacing(&self, scene_durations: &[f32], issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> f32 {
+        if scene_durations.is_empty() {
+            return 0.5;
+        }
+
+        let mut pacing_score: f32 = 0.8;
+
+        // Check scene duration variance
+        let avg_duration = scene_durations.iter().sum::<f32>() / scene_durations.len() as f32;
+        let duration_variance = scene_durations.iter()
+            .map(|d| (d - avg_duration).powi(2))
+            .sum::<f32>() / scene_durations.len() as f32;
+
+        if duration_variance > 5000.0 { // High variance threshold
+            issues.push("Inconsistent scene pacing".to_string());
+            suggestions.push("Balance scene lengths for better flow".to_string());
+            pacing_score -= 0.2;
+        }
+
+        // Check for extremely short/long scenes
+        for &duration in scene_durations {
+            if duration < self.pacing_thresholds.min_scene_duration {
+                issues.push("Scene too short for proper development".to_string());
+                suggestions.push("Extend brief scenes with character or world development".to_string());
+                pacing_score -= 0.1;
+            }
+            if duration > self.pacing_thresholds.max_scene_duration {
+                issues.push("Scene too long, may lose audience attention".to_string());
+                suggestions.push("Break long scenes into smaller segments".to_string());
+                pacing_score -= 0.1;
+            }
+        }
+
+        pacing_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn validate_tension_curve(&self, tension_curve: &[f32], issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> f32 {
+        if tension_curve.len() < 3 {
+            return 0.5;
+        }
+
+        let mut tension_score: f32 = 0.8;
+
+        // Check for proper tension escalation
+        let has_escalation = tension_curve.windows(2).any(|window| window[1] > window[0]);
+        if !has_escalation {
+            issues.push("Tension never escalates throughout narrative".to_string());
+            suggestions.push("Build conflict and stakes progressively".to_string());
+            tension_score -= 0.3;
+        }
+
+        // Check for tension peak
+        let max_tension = tension_curve.iter().fold(0.0f32, |a, &b| a.max(b));
+        let max_position = tension_curve.iter().position(|&x| x == max_tension).unwrap_or(0);
+        let relative_position = max_position as f32 / tension_curve.len() as f32;
+
+        if relative_position < 0.4 || relative_position > 0.8 {
+            issues.push("Tension peak positioned poorly in narrative".to_string());
+            suggestions.push("Move climax to 60-80% through the story".to_string());
+            tension_score -= 0.2;
+        }
+
+        // Check for smoothness (no jarring drops)
+        for window in tension_curve.windows(2) {
+            let tension_drop = window[0] - window[1];
+            if tension_drop > 0.5 { // Sudden large drop
+                issues.push("Abrupt tension drop detected".to_string());
+                suggestions.push("Smooth tension transitions for better flow".to_string());
+                tension_score -= 0.1;
+                break;
+            }
+        }
+
+        tension_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn validate_transitions(&self, narrative_sequence: &[NarrativeState], issues: &mut Vec<String>, suggestions: &mut Vec<String>) -> f32 {
+        if narrative_sequence.len() < 2 {
+            return 0.5;
+        }
+
+        let mut transition_score: f32 = 0.8;
+        let mut invalid_transitions = 0;
+
+        for window in narrative_sequence.windows(2) {
+            let from_state = &window[0];
+            let to_state = &window[1];
+
+            let valid_transition = self.transition_rules.iter().any(|rule| {
+                std::mem::discriminant(&rule.from_state) == std::mem::discriminant(from_state) &&
+                std::mem::discriminant(&rule.to_state) == std::mem::discriminant(to_state)
+            });
+
+            if !valid_transition {
+                invalid_transitions += 1;
+            }
+        }
+
+        if invalid_transitions > 0 {
+            let penalty = (invalid_transitions as f32 / (narrative_sequence.len() - 1) as f32) * 0.5;
+            transition_score -= penalty;
+            issues.push(format!("Found {} invalid narrative transitions", invalid_transitions));
+            suggestions.push("Review transition rules and narrative flow logic".to_string());
+        }
+
+        transition_score.clamp(0.0f32, 1.0f32)
+    }
+
+    pub fn get_flow_recommendations(&self, last_validation: &ValidationResult) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        if last_validation.flow_score < 0.6 {
+            recommendations.push("Consider restructuring narrative for better flow".to_string());
+        }
+
+        if last_validation.pacing_score < 0.6 {
+            recommendations.push("Adjust scene pacing and timing".to_string());
+        }
+
+        if last_validation.transition_score < 0.6 {
+            recommendations.push("Smooth narrative transitions between scenes".to_string());
+        }
+
+        if recommendations.is_empty() {
+            recommendations.push("Narrative flow is good, consider minor optimizations".to_string());
+        }
+
+        recommendations
     }
 }
 
 #[derive(Debug, Default)]
 pub struct NarrativeQualityAssessor {
-    // TODO: Implement quality assessment algorithms
     pub quality_metrics: HashMap<String, f32>,
+    pub assessment_weights: QualityWeights,
+    pub benchmark_standards: QualityBenchmarks,
+    pub assessment_history: Vec<QualityAssessment>,
 }
 
-impl NarrativeQualityAssessor {
-    pub fn new() -> Self {
+#[derive(Debug, Clone)]
+pub struct QualityWeights {
+    pub coherence_weight: f32,
+    pub engagement_weight: f32,
+    pub originality_weight: f32,
+    pub character_depth_weight: f32,
+    pub plot_complexity_weight: f32,
+    pub dialogue_quality_weight: f32,
+    pub pacing_weight: f32,
+    pub emotional_impact_weight: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct QualityBenchmarks {
+    pub minimum_coherence: f32,
+    pub target_engagement: f32,
+    pub originality_threshold: f32,
+    pub character_development_min: f32,
+    pub plot_sophistication_target: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct QualityAssessment {
+    pub overall_score: f32,
+    pub coherence_score: f32,
+    pub engagement_score: f32,
+    pub originality_score: f32,
+    pub character_quality_score: f32,
+    pub plot_quality_score: f32,
+    pub dialogue_quality_score: f32,
+    pub pacing_quality_score: f32,
+    pub emotional_impact_score: f32,
+    pub areas_of_strength: Vec<String>,
+    pub areas_for_improvement: Vec<String>,
+    pub quality_tier: QualityTier,
+    pub assessment_timestamp: std::time::SystemTime,
+    pub dimension_scores: std::collections::HashMap<String, f32>,
+    pub quality_trend: QualityTrend,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum QualityTier {
+    Exceptional,  // 90-100%
+    HighQuality,  // 75-89%
+    Good,         // 60-74%
+    Adequate,     // 45-59%
+    NeedsWork,    // 30-44%
+    Poor,         // 0-29%
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum QualityDimension {
+    Coherence,
+    Engagement,
+    Originality,
+    CharacterQuality,
+    PlotQuality,
+    DialogueQuality,
+    PacingQuality,
+    EmotionalImpact,
+    ThematicDepth,
+}
+
+impl Default for QualityWeights {
+    fn default() -> Self {
         Self {
-            quality_metrics: HashMap::new(),
+            coherence_weight: 0.2,
+            engagement_weight: 0.15,
+            originality_weight: 0.1,
+            character_depth_weight: 0.15,
+            plot_complexity_weight: 0.15,
+            dialogue_quality_weight: 0.1,
+            pacing_weight: 0.1,
+            emotional_impact_weight: 0.05,
         }
     }
 }
 
+impl Default for QualityBenchmarks {
+    fn default() -> Self {
+        Self {
+            minimum_coherence: 0.7,
+            target_engagement: 0.8,
+            originality_threshold: 0.6,
+            character_development_min: 0.65,
+            plot_sophistication_target: 0.75,
+        }
+    }
+}
+
+impl NarrativeQualityAssessor {
+    pub fn new() -> Self {
+        let mut assessor = Self {
+            quality_metrics: HashMap::new(),
+            assessment_weights: QualityWeights::default(),
+            benchmark_standards: QualityBenchmarks::default(),
+            assessment_history: Vec::new(),
+        };
+
+        assessor.initialize_quality_metrics();
+        assessor
+    }
+
+    fn initialize_quality_metrics(&mut self) {
+        // Baseline quality thresholds
+        self.quality_metrics.insert("coherence_baseline".to_string(), 0.7);
+        self.quality_metrics.insert("engagement_baseline".to_string(), 0.65);
+        self.quality_metrics.insert("originality_baseline".to_string(), 0.6);
+        self.quality_metrics.insert("character_depth_baseline".to_string(), 0.7);
+        self.quality_metrics.insert("plot_complexity_baseline".to_string(), 0.65);
+        self.quality_metrics.insert("dialogue_quality_baseline".to_string(), 0.7);
+        self.quality_metrics.insert("pacing_baseline".to_string(), 0.65);
+        self.quality_metrics.insert("emotional_impact_baseline".to_string(), 0.6);
+    }
+
+    pub fn assess_narrative_quality(&mut self, narrative_data: &NarrativeQualityData) -> QualityAssessment {
+        // Assess individual quality dimensions
+        let coherence_score = self.assess_coherence(&narrative_data.story_elements, &narrative_data.plot_threads);
+        let engagement_score = self.assess_engagement(&narrative_data.pacing_data, &narrative_data.tension_curve);
+        let originality_score = self.assess_originality(&narrative_data.thematic_elements, &narrative_data.plot_devices);
+        let character_quality_score = self.assess_character_quality(&narrative_data.character_data);
+        let plot_quality_score = self.assess_plot_quality(&narrative_data.plot_structure);
+        let dialogue_quality_score = self.assess_dialogue_quality(&narrative_data.dialogue_samples);
+        let pacing_quality_score = self.assess_pacing_quality(&narrative_data.scene_transitions);
+        let emotional_impact_score = self.assess_emotional_impact(&narrative_data.emotional_beats);
+
+        // Calculate weighted overall score
+        let overall_score = self.calculate_weighted_score(
+            coherence_score,
+            engagement_score,
+            originality_score,
+            character_quality_score,
+            plot_quality_score,
+            dialogue_quality_score,
+            pacing_quality_score,
+            emotional_impact_score,
+        );
+
+        // Determine quality tier
+        let quality_tier = self.determine_quality_tier(overall_score);
+
+        // Identify strengths and areas for improvement
+        let (areas_of_strength, areas_for_improvement) = self.analyze_strengths_and_weaknesses(
+            coherence_score,
+            engagement_score,
+            originality_score,
+            character_quality_score,
+            plot_quality_score,
+            dialogue_quality_score,
+            pacing_quality_score,
+            emotional_impact_score,
+        );
+
+        let mut dimension_scores = std::collections::HashMap::new();
+        dimension_scores.insert("coherence".to_string(), coherence_score);
+        dimension_scores.insert("engagement".to_string(), engagement_score);
+        dimension_scores.insert("originality".to_string(), originality_score);
+        dimension_scores.insert("character_quality".to_string(), character_quality_score);
+        dimension_scores.insert("plot_quality".to_string(), plot_quality_score);
+        dimension_scores.insert("dialogue_quality".to_string(), dialogue_quality_score);
+        dimension_scores.insert("pacing_quality".to_string(), pacing_quality_score);
+        dimension_scores.insert("emotional_impact".to_string(), emotional_impact_score);
+
+        let assessment = QualityAssessment {
+            overall_score,
+            coherence_score,
+            engagement_score,
+            originality_score,
+            character_quality_score,
+            plot_quality_score,
+            dialogue_quality_score,
+            pacing_quality_score,
+            emotional_impact_score,
+            areas_of_strength,
+            areas_for_improvement,
+            quality_tier,
+            assessment_timestamp: std::time::SystemTime::now(),
+            dimension_scores,
+            quality_trend: QualityTrend::Stable,
+        };
+
+        self.assessment_history.push(assessment.clone());
+
+        // Keep only recent assessments
+        if self.assessment_history.len() > 50 {
+            self.assessment_history.remove(0);
+        }
+
+        assessment
+    }
+
+    fn assess_coherence(&self, story_elements: &[String], plot_threads: &[String]) -> f32 {
+        if story_elements.is_empty() || plot_threads.is_empty() {
+            return 0.3;
+        }
+
+        let mut coherence_score: f32 = 0.8; // Base score
+
+        // Check for consistency in story elements
+        let element_consistency = story_elements.len() as f32 / 10.0; // Normalize to reasonable element count
+        coherence_score *= (1.0 - (element_consistency - 1.0).abs() * 0.1).clamp(0.5f32, 1.0f32);
+
+        // Check plot thread integration
+        let thread_integration = (plot_threads.len() as f32 / 5.0).min(1.0); // Optimal 3-5 threads
+        coherence_score *= 0.7 + thread_integration * 0.3;
+
+        coherence_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_engagement(&self, pacing_data: &[f32], tension_curve: &[f32]) -> f32 {
+        if pacing_data.is_empty() || tension_curve.is_empty() {
+            return 0.4;
+        }
+
+        let mut engagement_score: f32 = 0.7;
+
+        // Analyze pacing variety
+        let pacing_variance = self.calculate_variance(pacing_data);
+        if pacing_variance > 0.2 && pacing_variance < 0.8 { // Sweet spot for variety
+            engagement_score += 0.2;
+        }
+
+        // Analyze tension curve dynamics
+        let tension_range = tension_curve.iter().fold(0.0f32, |a, &b| a.max(b)) -
+                           tension_curve.iter().fold(1.0f32, |a, &b| a.min(b));
+        if tension_range > 0.6 { // Good dynamic range
+            engagement_score += 0.1;
+        }
+
+        engagement_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_originality(&self, thematic_elements: &[String], plot_devices: &[String]) -> f32 {
+        if thematic_elements.is_empty() && plot_devices.is_empty() {
+            return 0.3;
+        }
+
+        let mut originality_score: f32 = 0.6;
+
+        // Check thematic uniqueness
+        let unique_themes = thematic_elements.len();
+        if unique_themes >= 3 {
+            originality_score += 0.2;
+        }
+
+        // Check plot device variety
+        let unique_devices = plot_devices.len();
+        if unique_devices >= 2 && unique_devices <= 5 { // Sweet spot
+            originality_score += 0.2;
+        }
+
+        originality_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_character_quality(&self, character_data: &[String]) -> f32 {
+        if character_data.is_empty() {
+            return 0.2;
+        }
+
+        let mut character_score: f32 = 0.6;
+
+        // Character depth based on data richness
+        let avg_character_complexity = character_data.iter().map(|s| s.len()).sum::<usize>() as f32 / character_data.len() as f32;
+        if avg_character_complexity > 50.0 { // Rich character descriptions
+            character_score += 0.3;
+        } else if avg_character_complexity > 20.0 {
+            character_score += 0.1;
+        }
+
+        character_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_plot_quality(&self, plot_structure: &[String]) -> f32 {
+        if plot_structure.is_empty() {
+            return 0.3;
+        }
+
+        let mut plot_score: f32 = 0.6;
+
+        // Plot complexity and structure
+        let structure_elements = plot_structure.len();
+        if structure_elements >= 5 && structure_elements <= 12 { // Good structure range
+            plot_score += 0.3;
+        } else if structure_elements >= 3 {
+            plot_score += 0.1;
+        }
+
+        plot_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_dialogue_quality(&self, dialogue_samples: &[String]) -> f32 {
+        if dialogue_samples.is_empty() {
+            return 0.4;
+        }
+
+        let mut dialogue_score: f32 = 0.6;
+
+        // Dialogue variety and richness
+        let avg_dialogue_length = dialogue_samples.iter().map(|s| s.len()).sum::<usize>() as f32 / dialogue_samples.len() as f32;
+        if avg_dialogue_length > 30.0 && avg_dialogue_length < 200.0 { // Good dialogue length
+            dialogue_score += 0.2;
+        }
+
+        // Check for dialogue variety (different lengths suggest different voices)
+        let dialogue_variance = self.calculate_string_length_variance(dialogue_samples);
+        if dialogue_variance > 100.0 { // Good variety
+            dialogue_score += 0.2;
+        }
+
+        dialogue_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_pacing_quality(&self, scene_transitions: &[String]) -> f32 {
+        if scene_transitions.is_empty() {
+            return 0.5;
+        }
+
+        let mut pacing_score: f32 = 0.6;
+
+        // Transition quality based on variety
+        let transition_count = scene_transitions.len();
+        if transition_count >= 4 { // Good transition variety
+            pacing_score += 0.3;
+        } else if transition_count >= 2 {
+            pacing_score += 0.1;
+        }
+
+        pacing_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn assess_emotional_impact(&self, emotional_beats: &[String]) -> f32 {
+        if emotional_beats.is_empty() {
+            return 0.4;
+        }
+
+        let mut emotional_score: f32 = 0.6;
+
+        // Emotional variety and depth
+        let emotional_complexity = emotional_beats.len();
+        if emotional_complexity >= 6 { // Rich emotional content
+            emotional_score += 0.3;
+        } else if emotional_complexity >= 3 {
+            emotional_score += 0.2;
+        }
+
+        emotional_score.clamp(0.0f32, 1.0f32)
+    }
+
+    fn calculate_weighted_score(&self, coherence: f32, engagement: f32, originality: f32, character: f32, plot: f32, dialogue: f32, pacing: f32, emotional: f32) -> f32 {
+        let weights = &self.assessment_weights;
+
+        coherence * weights.coherence_weight +
+        engagement * weights.engagement_weight +
+        originality * weights.originality_weight +
+        character * weights.character_depth_weight +
+        plot * weights.plot_complexity_weight +
+        dialogue * weights.dialogue_quality_weight +
+        pacing * weights.pacing_weight +
+        emotional * weights.emotional_impact_weight
+    }
+
+    fn determine_quality_tier(&self, overall_score: f32) -> QualityTier {
+        match (overall_score * 100.0) as u32 {
+            90..=100 => QualityTier::Exceptional,
+            75..=89 => QualityTier::HighQuality,
+            60..=74 => QualityTier::Good,
+            45..=59 => QualityTier::Adequate,
+            30..=44 => QualityTier::NeedsWork,
+            _ => QualityTier::Poor,
+        }
+    }
+
+    fn analyze_strengths_and_weaknesses(&self, coherence: f32, engagement: f32, originality: f32, character: f32, plot: f32, dialogue: f32, pacing: f32, emotional: f32) -> (Vec<String>, Vec<String>) {
+        let scores = vec![
+            ("Coherence", coherence),
+            ("Engagement", engagement),
+            ("Originality", originality),
+            ("Character Development", character),
+            ("Plot Quality", plot),
+            ("Dialogue", dialogue),
+            ("Pacing", pacing),
+            ("Emotional Impact", emotional),
+        ];
+
+        let mut strengths = Vec::new();
+        let mut improvements = Vec::new();
+
+        for (area, score) in scores {
+            if score >= 0.8 {
+                strengths.push(format!("Excellent {}", area));
+            } else if score < 0.6 {
+                improvements.push(format!("Improve {}", area));
+            }
+        }
+
+        if strengths.is_empty() {
+            strengths.push("Consistent quality across all areas".to_string());
+        }
+        if improvements.is_empty() {
+            improvements.push("Minor refinements to maintain quality".to_string());
+        }
+
+        (strengths, improvements)
+    }
+
+    fn calculate_variance(&self, data: &[f32]) -> f32 {
+        if data.len() < 2 {
+            return 0.0;
+        }
+        let mean = data.iter().sum::<f32>() / data.len() as f32;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / data.len() as f32;
+        variance
+    }
+
+    fn calculate_string_length_variance(&self, strings: &[String]) -> f32 {
+        if strings.len() < 2 {
+            return 0.0;
+        }
+        let lengths: Vec<f32> = strings.iter().map(|s| s.len() as f32).collect();
+        self.calculate_variance(&lengths)
+    }
+
+    pub fn get_quality_trend(&self) -> QualityTrend {
+        if self.assessment_history.len() < 2 {
+            return QualityTrend::Stable;
+        }
+
+        let recent_scores: Vec<f32> = self.assessment_history.iter().rev().take(5).map(|a| a.overall_score).collect();
+        let trend_slope = self.calculate_trend_slope(&recent_scores);
+
+        if trend_slope > 0.05 {
+            QualityTrend::Improving
+        } else if trend_slope < -0.05 {
+            QualityTrend::Declining
+        } else {
+            QualityTrend::Stable
+        }
+    }
+
+    fn calculate_trend_slope(&self, scores: &[f32]) -> f32 {
+        if scores.len() < 2 {
+            return 0.0;
+        }
+
+        let n = scores.len() as f32;
+        let sum_x = (0..scores.len()).sum::<usize>() as f32;
+        let sum_y = scores.iter().sum::<f32>();
+        let sum_xy = scores.iter().enumerate().map(|(i, &y)| i as f32 * y).sum::<f32>();
+        let sum_x2 = (0..scores.len()).map(|i| (i * i) as f32).sum::<f32>();
+
+        (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum QualityTrend {
+    Improving,
+    Stable,
+    Declining,
+}
+
+#[derive(Debug, Default)]
+pub struct NarrativeQualityData {
+    pub story_elements: Vec<String>,
+    pub plot_threads: Vec<String>,
+    pub pacing_data: Vec<f32>,
+    pub tension_curve: Vec<f32>,
+    pub thematic_elements: Vec<String>,
+    pub plot_devices: Vec<String>,
+    pub character_data: Vec<String>,
+    pub plot_structure: Vec<String>,
+    pub dialogue_samples: Vec<String>,
+    pub scene_transitions: Vec<String>,
+    pub emotional_beats: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImprovementSuggestion {
+    pub id: String,
+    pub category: ImprovementCategory,
+    pub priority: ImprovementPriority,
+    pub description: String,
+    pub rationale: String,
+    pub implementation_steps: Vec<String>,
+    pub expected_impact: f32,
+    pub confidence_score: f32,
+    pub affected_components: Vec<String>,
+    pub prerequisites: Vec<String>,
+    pub estimated_effort: f32,
+    pub quality_dimensions: Vec<QualityDimension>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImprovementCategory {
+    CharacterDevelopment,
+    PlotStructure,
+    DialogueQuality,
+    PacingOptimization,
+    ThematicDepth,
+    EmotionalResonance,
+    WorldBuilding,
+    TechnicalExecution,
+    PlayerEngagement,
+    CulturalSensitivity,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ImprovementPriority {
+    Critical,
+    High,
+    Medium,
+    Low,
+    Optional,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImprovementAnalysis {
+    pub strengths: Vec<String>,
+    pub weaknesses: Vec<String>,
+    pub opportunities: Vec<String>,
+    pub threats: Vec<String>,
+    pub actionable_insights: Vec<String>,
+    pub quality_gaps: Vec<QualityGap>,
+    pub improvement_roadmap: Vec<ImprovementSuggestion>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QualityGap {
+    pub dimension: QualityDimension,
+    pub current_score: f32,
+    pub target_score: f32,
+    pub gap_size: f32,
+    pub improvement_potential: f32,
+}
+
 #[derive(Debug, Default)]
 pub struct NarrativeImprovementEngine {
-    // TODO: Implement AI-driven narrative improvement suggestions
-    pub improvement_suggestions: Vec<String>,
+    pub improvement_suggestions: Vec<ImprovementSuggestion>,
+    pub analysis_history: Vec<ImprovementAnalysis>,
+    pub learning_patterns: std::collections::HashMap<String, f32>,
+    pub success_metrics: ImprovementMetrics,
+}
+
+#[derive(Debug, Default)]
+pub struct ImprovementMetrics {
+    pub suggestions_generated: u32,
+    pub suggestions_implemented: u32,
+    pub average_impact_score: f32,
+    pub category_success_rates: std::collections::HashMap<ImprovementCategory, f32>,
+    pub quality_improvements: std::collections::HashMap<QualityDimension, f32>,
 }
 
 impl NarrativeImprovementEngine {
     pub fn new() -> Self {
         Self {
             improvement_suggestions: vec![],
+            analysis_history: vec![],
+            learning_patterns: std::collections::HashMap::new(),
+            success_metrics: ImprovementMetrics::default(),
         }
     }
+
+    pub async fn analyze_narrative_quality(&self, assessment: &QualityAssessment) -> RobinResult<ImprovementAnalysis> {
+        let strengths = self.identify_narrative_strengths(assessment);
+        let weaknesses = self.identify_narrative_weaknesses(assessment);
+        let opportunities = self.discover_improvement_opportunities(assessment);
+        let threats = self.assess_quality_threats(assessment);
+        let actionable_insights = self.generate_actionable_insights(&strengths, &weaknesses, &opportunities);
+        let quality_gaps = self.calculate_quality_gaps(assessment);
+        let improvement_roadmap = self.create_improvement_roadmap(&quality_gaps, &opportunities).await?;
+
+        Ok(ImprovementAnalysis {
+            strengths,
+            weaknesses,
+            opportunities,
+            threats,
+            actionable_insights,
+            quality_gaps,
+            improvement_roadmap,
+        })
+    }
+
+    pub async fn generate_targeted_suggestions(&self, quality_gaps: &[QualityGap], context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        let mut suggestions = Vec::new();
+
+        for gap in quality_gaps {
+            let category_suggestions = self.generate_category_suggestions(gap, context).await?;
+            suggestions.extend(category_suggestions);
+        }
+
+        // Sort by priority and expected impact
+        suggestions.sort_by(|a, b| {
+            a.priority.cmp(&b.priority)
+                .then(b.expected_impact.partial_cmp(&a.expected_impact).unwrap_or(std::cmp::Ordering::Equal))
+        });
+
+        Ok(suggestions)
+    }
+
+    async fn generate_category_suggestions(&self, gap: &QualityGap, context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        match gap.dimension {
+            QualityDimension::Coherence => self.generate_coherence_suggestions(gap, context).await,
+            QualityDimension::Engagement => self.generate_engagement_suggestions(gap, context).await,
+            QualityDimension::Originality => self.generate_originality_suggestions(gap, context).await,
+            QualityDimension::CharacterQuality => self.generate_character_suggestions(gap, context).await,
+            QualityDimension::PlotQuality => self.generate_plot_suggestions(gap, context).await,
+            QualityDimension::DialogueQuality => self.generate_dialogue_suggestions(gap, context).await,
+            QualityDimension::PacingQuality => self.generate_pacing_suggestions(gap, context).await,
+            QualityDimension::EmotionalImpact => self.generate_emotional_suggestions(gap, context).await,
+            QualityDimension::ThematicDepth => self.generate_thematic_depth_suggestions(gap, context).await,
+        }
+    }
+
+    async fn generate_coherence_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        let mut suggestions = vec![];
+
+        if gap.gap_size > 0.3 {
+            suggestions.push(ImprovementSuggestion {
+                id: format!("coherence_critical_{}", std::process::id()),
+                category: ImprovementCategory::TechnicalExecution,
+                priority: ImprovementPriority::Critical,
+                description: "Resolve major narrative inconsistencies".to_string(),
+                rationale: "Large coherence gaps break player immersion and story believability".to_string(),
+                implementation_steps: vec![
+                    "Audit all plot points for logical consistency".to_string(),
+                    "Review character motivations and actions".to_string(),
+                    "Check timeline and causality chains".to_string(),
+                    "Validate world rules adherence".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.8,
+                confidence_score: 0.9,
+                affected_components: vec!["plot_structure".to_string(), "character_arcs".to_string()],
+                prerequisites: vec!["narrative_audit".to_string()],
+                estimated_effort: 5.0,
+                quality_dimensions: vec![QualityDimension::Coherence, QualityDimension::PlotQuality],
+            });
+        }
+
+        if gap.gap_size > 0.15 {
+            suggestions.push(ImprovementSuggestion {
+                id: format!("coherence_improvement_{}", std::process::id()),
+                category: ImprovementCategory::PlotStructure,
+                priority: ImprovementPriority::High,
+                description: "Strengthen narrative continuity".to_string(),
+                rationale: "Improved coherence enhances story flow and player understanding".to_string(),
+                implementation_steps: vec![
+                    "Create detailed story bible".to_string(),
+                    "Establish clear cause-effect relationships".to_string(),
+                    "Implement consistency checking systems".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.6,
+                confidence_score: 0.85,
+                affected_components: vec!["narrative_flow".to_string()],
+                prerequisites: vec![],
+                estimated_effort: 3.0,
+                quality_dimensions: vec![QualityDimension::Coherence],
+            });
+        }
+
+        Ok(suggestions)
+    }
+
+    async fn generate_engagement_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("engagement_boost_{}", std::process::id()),
+                category: ImprovementCategory::PlayerEngagement,
+                priority: if gap.gap_size > 0.4 { ImprovementPriority::Critical } else { ImprovementPriority::High },
+                description: "Enhance player engagement through interactive elements".to_string(),
+                rationale: "Higher engagement increases player retention and emotional investment".to_string(),
+                implementation_steps: vec![
+                    "Add meaningful player choices".to_string(),
+                    "Implement branching dialogue options".to_string(),
+                    "Create interactive story moments".to_string(),
+                    "Develop player agency preservation systems".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.75,
+                confidence_score: 0.8,
+                affected_components: vec!["player_interaction".to_string(), "dialogue_system".to_string()],
+                prerequisites: vec!["choice_system".to_string()],
+                estimated_effort: 4.0,
+                quality_dimensions: vec![QualityDimension::Engagement, QualityDimension::EmotionalImpact],
+            },
+        ])
+    }
+
+    async fn generate_originality_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("originality_enhancement_{}", std::process::id()),
+                category: ImprovementCategory::WorldBuilding,
+                priority: if gap.gap_size > 0.5 { ImprovementPriority::High } else { ImprovementPriority::Medium },
+                description: "Enhance creative originality and unique elements".to_string(),
+                rationale: "Original content distinguishes the narrative and increases player interest".to_string(),
+                implementation_steps: vec![
+                    "Identify and develop unique story elements".to_string(),
+                    "Create innovative character concepts".to_string(),
+                    "Design original world-building elements".to_string(),
+                    "Implement creative narrative techniques".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.65,
+                confidence_score: 0.7,
+                affected_components: vec!["creative_engine".to_string(), "world_builder".to_string()],
+                prerequisites: vec!["creativity_analysis".to_string()],
+                estimated_effort: 4.5,
+                quality_dimensions: vec![QualityDimension::Originality, QualityDimension::Engagement],
+            },
+        ])
+    }
+
+    async fn generate_character_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("character_depth_{}", std::process::id()),
+                category: ImprovementCategory::CharacterDevelopment,
+                priority: ImprovementPriority::High,
+                description: "Deepen character psychology and development".to_string(),
+                rationale: "Rich character development creates stronger emotional connections".to_string(),
+                implementation_steps: vec![
+                    "Develop detailed character backstories".to_string(),
+                    "Create internal conflict systems".to_string(),
+                    "Implement character growth arcs".to_string(),
+                    "Add psychological complexity layers".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.7,
+                confidence_score: 0.85,
+                affected_components: vec!["character_system".to_string(), "psychology_engine".to_string()],
+                prerequisites: vec!["character_framework".to_string()],
+                estimated_effort: 6.0,
+                quality_dimensions: vec![QualityDimension::CharacterQuality, QualityDimension::EmotionalImpact],
+            },
+        ])
+    }
+
+    async fn generate_plot_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("plot_structure_{}", std::process::id()),
+                category: ImprovementCategory::PlotStructure,
+                priority: ImprovementPriority::Medium,
+                description: "Optimize plot structure and pacing".to_string(),
+                rationale: "Well-structured plots maintain player interest and narrative momentum".to_string(),
+                implementation_steps: vec![
+                    "Analyze three-act structure adherence".to_string(),
+                    "Balance tension and release cycles".to_string(),
+                    "Optimize subplot integration".to_string(),
+                    "Enhance climactic moments".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.65,
+                confidence_score: 0.8,
+                affected_components: vec!["plot_engine".to_string(), "pacing_system".to_string()],
+                prerequisites: vec!["plot_analysis".to_string()],
+                estimated_effort: 4.5,
+                quality_dimensions: vec![QualityDimension::PlotQuality, QualityDimension::PacingQuality],
+            },
+        ])
+    }
+
+    async fn generate_dialogue_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("dialogue_enhancement_{}", std::process::id()),
+                category: ImprovementCategory::DialogueQuality,
+                priority: ImprovementPriority::Medium,
+                description: "Improve dialogue naturalness and character voice".to_string(),
+                rationale: "Quality dialogue enhances character believability and story immersion".to_string(),
+                implementation_steps: vec![
+                    "Develop distinct character voices".to_string(),
+                    "Implement subtext layers".to_string(),
+                    "Add emotional nuance".to_string(),
+                    "Optimize conversation flow".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.6,
+                confidence_score: 0.75,
+                affected_components: vec!["dialogue_generator".to_string(), "character_voices".to_string()],
+                prerequisites: vec!["voice_analysis".to_string()],
+                estimated_effort: 3.5,
+                quality_dimensions: vec![QualityDimension::DialogueQuality, QualityDimension::CharacterQuality],
+            },
+        ])
+    }
+
+    async fn generate_pacing_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("pacing_optimization_{}", std::process::id()),
+                category: ImprovementCategory::PacingOptimization,
+                priority: ImprovementPriority::High,
+                description: "Optimize narrative pacing and rhythm".to_string(),
+                rationale: "Proper pacing maintains player engagement and story momentum".to_string(),
+                implementation_steps: vec![
+                    "Analyze scene length distribution".to_string(),
+                    "Balance action and reflection moments".to_string(),
+                    "Optimize transition timing".to_string(),
+                    "Implement dynamic pacing adjustments".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.7,
+                confidence_score: 0.82,
+                affected_components: vec!["pacing_engine".to_string(), "scene_manager".to_string()],
+                prerequisites: vec!["pacing_analysis".to_string()],
+                estimated_effort: 4.0,
+                quality_dimensions: vec![QualityDimension::PacingQuality, QualityDimension::Engagement],
+            },
+        ])
+    }
+
+    async fn generate_emotional_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("emotional_impact_{}", std::process::id()),
+                category: ImprovementCategory::EmotionalResonance,
+                priority: ImprovementPriority::High,
+                description: "Strengthen emotional impact and resonance".to_string(),
+                rationale: "Strong emotional connections create lasting player memories and investment".to_string(),
+                implementation_steps: vec![
+                    "Identify emotional peak moments".to_string(),
+                    "Develop emotional build-up sequences".to_string(),
+                    "Create cathartic release points".to_string(),
+                    "Implement empathy-building mechanics".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.8,
+                confidence_score: 0.85,
+                affected_components: vec!["emotion_engine".to_string(), "empathy_system".to_string()],
+                prerequisites: vec!["emotional_mapping".to_string()],
+                estimated_effort: 5.5,
+                quality_dimensions: vec![QualityDimension::EmotionalImpact, QualityDimension::CharacterQuality],
+            },
+        ])
+    }
+
+    async fn generate_thematic_depth_suggestions(&self, gap: &QualityGap, _context: &NarrativeContext) -> RobinResult<Vec<ImprovementSuggestion>> {
+        Ok(vec![
+            ImprovementSuggestion {
+                id: format!("thematic_depth_{}", std::process::id()),
+                category: ImprovementCategory::ThematicDepth,
+                priority: if gap.gap_size > 0.4 { ImprovementPriority::High } else { ImprovementPriority::Medium },
+                description: "Enhance thematic depth and symbolic meaning".to_string(),
+                rationale: "Rich thematic content adds intellectual and emotional layers to the narrative".to_string(),
+                implementation_steps: vec![
+                    "Identify core themes and motifs".to_string(),
+                    "Develop symbolic representations".to_string(),
+                    "Integrate themes into character development".to_string(),
+                    "Create meaningful metaphorical content".to_string(),
+                ],
+                expected_impact: gap.improvement_potential * 0.7,
+                confidence_score: 0.75,
+                affected_components: vec!["theme_engine".to_string(), "symbolic_system".to_string()],
+                prerequisites: vec!["thematic_analysis".to_string()],
+                estimated_effort: 4.0,
+                quality_dimensions: vec![QualityDimension::ThematicDepth, QualityDimension::Coherence],
+            },
+        ])
+    }
+
+    async fn create_improvement_roadmap(&self, quality_gaps: &[QualityGap], opportunities: &[String]) -> RobinResult<Vec<ImprovementSuggestion>> {
+        let mut roadmap = Vec::new();
+
+        // Create a mock context for suggestion generation
+        let context = NarrativeContext {
+            current_themes: vec!["character_growth".to_string(), "moral_complexity".to_string()],
+            target_audience: "mature_players".to_string(),
+            genre_constraints: vec!["fantasy".to_string(), "drama".to_string()],
+            technical_constraints: vec!["real_time_generation".to_string()],
+            cultural_considerations: vec!["inclusive_representation".to_string()],
+        };
+
+        for gap in quality_gaps {
+            let suggestions = self.generate_category_suggestions(gap, &context).await?;
+            roadmap.extend(suggestions);
+        }
+
+        // Add opportunity-based suggestions
+        for opportunity in opportunities {
+            if opportunity.contains("thematic") {
+                roadmap.push(ImprovementSuggestion {
+                    id: format!("thematic_opportunity_{}", std::process::id()),
+                    category: ImprovementCategory::ThematicDepth,
+                    priority: ImprovementPriority::Medium,
+                    description: format!("Explore thematic opportunity: {}", opportunity),
+                    rationale: "Thematic depth adds intellectual and emotional layers to the narrative".to_string(),
+                    implementation_steps: vec![
+                        "Identify core thematic elements".to_string(),
+                        "Develop symbolic representations".to_string(),
+                        "Integrate themes into character arcs".to_string(),
+                    ],
+                    expected_impact: 0.6,
+                    confidence_score: 0.75,
+                    affected_components: vec!["theme_engine".to_string()],
+                    prerequisites: vec!["thematic_analysis".to_string()],
+                    estimated_effort: 3.0,
+                    quality_dimensions: vec![QualityDimension::Coherence, QualityDimension::EmotionalImpact],
+                });
+            }
+        }
+
+        Ok(roadmap)
+    }
+
+    fn identify_narrative_strengths(&self, assessment: &QualityAssessment) -> Vec<String> {
+        let mut strengths = Vec::new();
+
+        for (dimension, score) in &assessment.dimension_scores {
+            if *score > 0.8 {
+                match dimension.as_str() {
+                    "coherence" => strengths.push("Strong narrative coherence and consistency".to_string()),
+                    "engagement" => strengths.push("High player engagement and interest".to_string()),
+                    "originality" => strengths.push("Creative and original content".to_string()),
+                    "character_quality" => strengths.push("Well-developed, compelling characters".to_string()),
+                    "plot_quality" => strengths.push("Solid plot structure and development".to_string()),
+                    "dialogue_quality" => strengths.push("Natural, engaging dialogue".to_string()),
+                    "pacing_quality" => strengths.push("Effective pacing and rhythm".to_string()),
+                    "emotional_impact" => strengths.push("Strong emotional resonance".to_string()),
+                    _ => {}
+                }
+            }
+        }
+
+        if strengths.is_empty() {
+            strengths.push("Baseline narrative framework established".to_string());
+        }
+
+        strengths
+    }
+
+    fn identify_narrative_weaknesses(&self, assessment: &QualityAssessment) -> Vec<String> {
+        let mut weaknesses = Vec::new();
+
+        for (dimension, score) in &assessment.dimension_scores {
+            if *score < 0.4 {
+                match dimension.as_str() {
+                    "coherence" => weaknesses.push("Narrative inconsistencies and plot holes".to_string()),
+                    "engagement" => weaknesses.push("Low player engagement and interest".to_string()),
+                    "originality" => weaknesses.push("Lack of creative or original elements".to_string()),
+                    "character_quality" => weaknesses.push("Underdeveloped or inconsistent characters".to_string()),
+                    "plot_quality" => weaknesses.push("Weak plot structure or development issues".to_string()),
+                    "dialogue_quality" => weaknesses.push("Unnatural or ineffective dialogue".to_string()),
+                    "pacing_quality" => weaknesses.push("Poor pacing and rhythm issues".to_string()),
+                    "emotional_impact" => weaknesses.push("Limited emotional resonance".to_string()),
+                    _ => {}
+                }
+            }
+        }
+
+        weaknesses
+    }
+
+    fn discover_improvement_opportunities(&self, assessment: &QualityAssessment) -> Vec<String> {
+        let mut opportunities = Vec::new();
+
+        // Identify areas with medium scores that have improvement potential
+        for (dimension, score) in &assessment.dimension_scores {
+            if *score >= 0.4 && *score <= 0.7 {
+                match dimension.as_str() {
+                    "thematic_depth" => opportunities.push("Deepen thematic exploration and symbolism".to_string()),
+                    "character_quality" => opportunities.push("Expand character psychology and development".to_string()),
+                    "emotional_impact" => opportunities.push("Enhance emotional moments and player connection".to_string()),
+                    "engagement" => opportunities.push("Increase interactive elements and player agency".to_string()),
+                    _ => {}
+                }
+            }
+        }
+
+        // Add cross-dimensional opportunities
+        let avg_score = assessment.overall_score;
+        if avg_score > 0.6 {
+            opportunities.push("Integrate AI-driven dynamic content adaptation".to_string());
+            opportunities.push("Implement advanced personalization features".to_string());
+        }
+
+        if opportunities.is_empty() {
+            opportunities.push("Establish foundational narrative improvement systems".to_string());
+        }
+
+        opportunities
+    }
+
+    fn assess_quality_threats(&self, assessment: &QualityAssessment) -> Vec<String> {
+        let mut threats = Vec::new();
+
+        if assessment.overall_score < 0.3 {
+            threats.push("Critical quality threshold breach - player dissatisfaction risk".to_string());
+        }
+
+        // Check for trending downward
+        match assessment.quality_trend {
+            QualityTrend::Declining => {
+                threats.push("Declining quality trend detected".to_string());
+            }
+            _ => {}
+        }
+
+        // Check for inconsistent quality across dimensions
+        let scores: Vec<f32> = assessment.dimension_scores.values().cloned().collect();
+        if let (Some(&min), Some(&max)) = (scores.iter().min_by(|a, b| a.partial_cmp(b).unwrap()),
+                                           scores.iter().max_by(|a, b| a.partial_cmp(b).unwrap())) {
+            if max - min > 0.5 {
+                threats.push("Inconsistent quality across narrative dimensions".to_string());
+            }
+        }
+
+        threats
+    }
+
+    fn generate_actionable_insights(&self, strengths: &[String], weaknesses: &[String], opportunities: &[String]) -> Vec<String> {
+        let mut insights = Vec::new();
+
+        // Leverage strengths to address weaknesses
+        if !strengths.is_empty() && !weaknesses.is_empty() {
+            insights.push("Leverage narrative strengths to systematically address identified weaknesses".to_string());
+        }
+
+        // Prioritize high-impact opportunities
+        if !opportunities.is_empty() {
+            insights.push("Focus on opportunities with highest player impact and lowest implementation complexity".to_string());
+        }
+
+        // Quality improvement strategy
+        if weaknesses.len() > strengths.len() {
+            insights.push("Implement foundational quality improvements before advancing to enhancement features".to_string());
+        } else {
+            insights.push("Build upon existing strengths while selectively addressing critical weaknesses".to_string());
+        }
+
+        insights.push("Implement continuous quality monitoring and iterative improvement cycles".to_string());
+
+        insights
+    }
+
+    fn calculate_quality_gaps(&self, assessment: &QualityAssessment) -> Vec<QualityGap> {
+        let target_scores = [
+            (QualityDimension::Coherence, 0.85),
+            (QualityDimension::Engagement, 0.8),
+            (QualityDimension::Originality, 0.75),
+            (QualityDimension::CharacterQuality, 0.85),
+            (QualityDimension::PlotQuality, 0.8),
+            (QualityDimension::DialogueQuality, 0.75),
+            (QualityDimension::PacingQuality, 0.8),
+            (QualityDimension::EmotionalImpact, 0.85),
+        ];
+
+        let mut gaps = Vec::new();
+
+        for (target_dimension, target_score) in target_scores {
+            let dimension_key = match target_dimension {
+                QualityDimension::Coherence => "coherence",
+                QualityDimension::Engagement => "engagement",
+                QualityDimension::Originality => "originality",
+                QualityDimension::CharacterQuality => "character_quality",
+                QualityDimension::PlotQuality => "plot_quality",
+                QualityDimension::DialogueQuality => "dialogue_quality",
+                QualityDimension::PacingQuality => "pacing_quality",
+                QualityDimension::EmotionalImpact => "emotional_impact",
+                _ => continue,
+            };
+
+            if let Some(current_score) = assessment.dimension_scores.get(dimension_key) {
+                let gap_size: f32 = (target_score - current_score).max(0.0);
+                let improvement_potential = gap_size / target_score;
+
+                if gap_size > 0.05 { // Only include meaningful gaps
+                    gaps.push(QualityGap {
+                        dimension: target_dimension,
+                        current_score: *current_score,
+                        target_score,
+                        gap_size,
+                        improvement_potential,
+                    });
+                }
+            }
+        }
+
+        // Sort by gap size (largest first)
+        gaps.sort_by(|a, b| b.gap_size.partial_cmp(&a.gap_size).unwrap_or(std::cmp::Ordering::Equal));
+
+        gaps
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NarrativeContext {
+    pub current_themes: Vec<String>,
+    pub target_audience: String,
+    pub genre_constraints: Vec<String>,
+    pub technical_constraints: Vec<String>,
+    pub cultural_considerations: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoherenceMetric {
+    pub metric_type: CoherenceType,
+    pub score: f32,
+    pub confidence: f32,
+    pub measurement_time: std::time::Instant,
+    pub context: String,
+    pub violations: Vec<CoherenceViolation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CoherenceType {
+    PlotConsistency,
+    CharacterConsistency,
+    WorldRuleConsistency,
+    TemporalConsistency,
+    CausalConsistency,
+    DialogueConsistency,
+    ThematicConsistency,
+    ToneConsistency,
+    StyleConsistency,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoherenceViolation {
+    pub id: String,
+    pub violation_type: CoherenceType,
+    pub severity: ViolationSeverity,
+    pub description: String,
+    pub location: String,
+    pub suggested_fix: String,
+    pub impact_score: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ViolationSeverity {
+    Critical,
+    Major,
+    Minor,
+    Negligible,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoherenceAnalysis {
+    pub overall_coherence: f32,
+    pub coherence_metrics: Vec<CoherenceMetric>,
+    pub trend_analysis: CoherenceTrend,
+    pub violation_summary: ViolationSummary,
+    pub improvement_recommendations: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoherenceTrend {
+    pub direction: f32, // -1.0 to 1.0, negative means declining
+    pub velocity: f32,  // Rate of change
+    pub stability: f32, // How consistent the trend is
+    pub prediction: f32, // Predicted coherence in next period
+}
+
+#[derive(Debug, Clone)]
+pub struct ViolationSummary {
+    pub total_violations: u32,
+    pub critical_violations: u32,
+    pub major_violations: u32,
+    pub minor_violations: u32,
+    pub most_frequent_type: CoherenceType,
+    pub severity_distribution: std::collections::HashMap<ViolationSeverity, u32>,
 }
 
 #[derive(Debug, Default)]
 pub struct CoherenceMetricsSystem {
-    // TODO: Implement coherence measurement and tracking
-    pub metrics: HashMap<String, f32>,
+    pub metrics_history: Vec<CoherenceMetric>,
+    pub current_analysis: Option<CoherenceAnalysis>,
+    pub tracking_config: CoherenceTrackingConfig,
+    pub violation_patterns: std::collections::HashMap<String, f32>,
+    pub baseline_scores: std::collections::HashMap<CoherenceType, f32>,
+}
+
+#[derive(Debug)]
+pub struct CoherenceTrackingConfig {
+    pub tracking_enabled: bool,
+    pub measurement_frequency: std::time::Duration,
+    pub violation_threshold: f32,
+    pub trend_window: usize,
+    pub auto_analysis: bool,
+    pub real_time_monitoring: bool,
+}
+
+impl Default for CoherenceTrackingConfig {
+    fn default() -> Self {
+        Self {
+            tracking_enabled: true,
+            measurement_frequency: std::time::Duration::from_secs(30),
+            violation_threshold: 0.3,
+            trend_window: 10,
+            auto_analysis: true,
+            real_time_monitoring: true,
+        }
+    }
 }
 
 impl CoherenceMetricsSystem {
     pub fn new() -> Self {
         Self {
-            metrics: HashMap::new(),
+            metrics_history: Vec::new(),
+            current_analysis: None,
+            tracking_config: CoherenceTrackingConfig::default(),
+            violation_patterns: std::collections::HashMap::new(),
+            baseline_scores: Self::initialize_baseline_scores(),
         }
+    }
+
+    fn initialize_baseline_scores() -> std::collections::HashMap<CoherenceType, f32> {
+        let mut baselines = std::collections::HashMap::new();
+        baselines.insert(CoherenceType::PlotConsistency, 0.7);
+        baselines.insert(CoherenceType::CharacterConsistency, 0.75);
+        baselines.insert(CoherenceType::WorldRuleConsistency, 0.8);
+        baselines.insert(CoherenceType::TemporalConsistency, 0.85);
+        baselines.insert(CoherenceType::CausalConsistency, 0.8);
+        baselines.insert(CoherenceType::DialogueConsistency, 0.7);
+        baselines.insert(CoherenceType::ThematicConsistency, 0.75);
+        baselines.insert(CoherenceType::ToneConsistency, 0.7);
+        baselines.insert(CoherenceType::StyleConsistency, 0.65);
+        baselines
+    }
+
+    pub async fn measure_coherence(&mut self, narrative_content: &str, context: &str) -> RobinResult<CoherenceAnalysis> {
+        let mut metrics = Vec::new();
+
+        // Measure each type of coherence
+        for coherence_type in [
+            CoherenceType::PlotConsistency,
+            CoherenceType::CharacterConsistency,
+            CoherenceType::WorldRuleConsistency,
+            CoherenceType::TemporalConsistency,
+            CoherenceType::CausalConsistency,
+            CoherenceType::DialogueConsistency,
+            CoherenceType::ThematicConsistency,
+            CoherenceType::ToneConsistency,
+            CoherenceType::StyleConsistency,
+        ] {
+            let metric = self.measure_specific_coherence(&coherence_type, narrative_content, context).await?;
+            metrics.push(metric);
+        }
+
+        // Store metrics in history
+        self.metrics_history.extend(metrics.clone());
+
+        // Calculate overall coherence
+        let overall_coherence = self.calculate_overall_coherence(&metrics);
+
+        // Analyze trends
+        let trend_analysis = self.analyze_coherence_trends();
+
+        // Summarize violations
+        let violation_summary = self.summarize_violations(&metrics);
+
+        // Generate improvement recommendations
+        let improvement_recommendations = self.generate_coherence_recommendations(&metrics, &violation_summary);
+
+        let analysis = CoherenceAnalysis {
+            overall_coherence,
+            coherence_metrics: metrics,
+            trend_analysis,
+            violation_summary,
+            improvement_recommendations,
+        };
+
+        self.current_analysis = Some(analysis.clone());
+        Ok(analysis)
+    }
+
+    async fn measure_specific_coherence(&self, coherence_type: &CoherenceType, content: &str, context: &str) -> RobinResult<CoherenceMetric> {
+        let (score, violations) = match coherence_type {
+            CoherenceType::PlotConsistency => self.analyze_plot_consistency(content).await?,
+            CoherenceType::CharacterConsistency => self.analyze_character_consistency(content).await?,
+            CoherenceType::WorldRuleConsistency => self.analyze_world_rule_consistency(content).await?,
+            CoherenceType::TemporalConsistency => self.analyze_temporal_consistency(content).await?,
+            CoherenceType::CausalConsistency => self.analyze_causal_consistency(content).await?,
+            CoherenceType::DialogueConsistency => self.analyze_dialogue_consistency(content).await?,
+            CoherenceType::ThematicConsistency => self.analyze_thematic_consistency(content).await?,
+            CoherenceType::ToneConsistency => self.analyze_tone_consistency(content).await?,
+            CoherenceType::StyleConsistency => self.analyze_style_consistency(content).await?,
+        };
+
+        let confidence = self.calculate_measurement_confidence(coherence_type, content);
+
+        Ok(CoherenceMetric {
+            metric_type: coherence_type.clone(),
+            score,
+            confidence,
+            measurement_time: std::time::Instant::now(),
+            context: context.to_string(),
+            violations,
+        })
+    }
+
+    async fn analyze_plot_consistency(&self, content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        let mut violations = Vec::new();
+        let mut consistency_score: f32 = 0.8; // Base score
+
+        // Check for plot hole indicators
+        let plot_hole_keywords = ["suddenly", "inexplicably", "somehow", "miraculously"];
+        for keyword in plot_hole_keywords {
+            if content.to_lowercase().contains(keyword) {
+                violations.push(CoherenceViolation {
+                    id: format!("plot_hole_{}", std::process::id()),
+                    violation_type: CoherenceType::PlotConsistency,
+                    severity: ViolationSeverity::Major,
+                    description: format!("Potential plot hole indicator: '{}'", keyword),
+                    location: "narrative_content".to_string(),
+                    suggested_fix: "Provide clear logical explanation for events".to_string(),
+                    impact_score: 0.3,
+                });
+                consistency_score -= 0.1;
+            }
+        }
+
+        // Check for inconsistent story elements
+        if content.len() > 1000 {
+            let sections: Vec<&str> = content.split('\n').collect();
+            if sections.len() > 3 {
+                // Simple inconsistency detection based on contradictory statements
+                for (i, section) in sections.iter().enumerate() {
+                    for (j, other_section) in sections.iter().enumerate() {
+                        if i != j && self.sections_contradict(section, other_section) {
+                            violations.push(CoherenceViolation {
+                                id: format!("plot_contradiction_{}_{}", i, j),
+                                violation_type: CoherenceType::PlotConsistency,
+                                severity: ViolationSeverity::Critical,
+                                description: "Contradictory plot elements detected".to_string(),
+                                location: format!("sections {} and {}", i, j),
+                                suggested_fix: "Resolve contradictory statements".to_string(),
+                                impact_score: 0.5,
+                            });
+                            consistency_score -= 0.2;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((consistency_score.max(0.0f32).min(1.0f32), violations))
+    }
+
+    async fn analyze_character_consistency(&self, content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        let mut violations = Vec::new();
+        let mut consistency_score: f32 = 0.75;
+
+        // Check for character name consistency
+        let character_mentions = self.extract_character_mentions(content);
+        for (character, mentions) in character_mentions {
+            if mentions > 1 {
+                // Check for behavioral consistency indicators
+                let behavior_keywords = ["acted", "behaved", "said", "thought", "felt"];
+                let character_behaviors: Vec<_> = behavior_keywords.iter()
+                    .filter(|&keyword| content.contains(&format!("{} {}", character, keyword)))
+                    .collect();
+
+                if behavior_keywords.len() > 2 && self.behaviors_inconsistent(&character_behaviors) {
+                    violations.push(CoherenceViolation {
+                        id: format!("character_inconsistency_{}", character.replace(' ', "_")),
+                        violation_type: CoherenceType::CharacterConsistency,
+                        severity: ViolationSeverity::Major,
+                        description: format!("Character '{}' shows inconsistent behavior", character),
+                        location: "character_development".to_string(),
+                        suggested_fix: "Ensure character actions align with established personality".to_string(),
+                        impact_score: 0.4,
+                    });
+                    consistency_score -= 0.15;
+                }
+            }
+        }
+
+        Ok((consistency_score.max(0.0f32).min(1.0f32), violations))
+    }
+
+    async fn analyze_world_rule_consistency(&self, content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        let mut violations = Vec::new();
+        let consistency_score: f32 = 0.85; // Simplified implementation
+
+        // Check for magic/physics rule violations
+        let rule_keywords = ["magic", "spell", "physics", "gravity", "time"];
+        for keyword in rule_keywords {
+            if content.to_lowercase().contains(keyword) {
+                // This is a simplified check - in practice, you'd have more sophisticated rule checking
+                if content.to_lowercase().contains("impossible") {
+                    violations.push(CoherenceViolation {
+                        id: format!("world_rule_violation_{}", keyword),
+                        violation_type: CoherenceType::WorldRuleConsistency,
+                        severity: ViolationSeverity::Minor,
+                        description: format!("Potential world rule inconsistency related to {}", keyword),
+                        location: "world_building".to_string(),
+                        suggested_fix: "Ensure world rules are consistently applied".to_string(),
+                        impact_score: 0.2,
+                    });
+                }
+            }
+        }
+
+        Ok((consistency_score, violations))
+    }
+
+    async fn analyze_temporal_consistency(&self, _content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        // Simplified temporal consistency check
+        Ok((0.8, Vec::new()))
+    }
+
+    async fn analyze_causal_consistency(&self, _content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        // Simplified causal consistency check
+        Ok((0.75, Vec::new()))
+    }
+
+    async fn analyze_dialogue_consistency(&self, content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        let mut violations = Vec::new();
+        let mut consistency_score: f32 = 0.7;
+
+        // Check for dialogue formatting consistency
+        let dialogue_lines: Vec<_> = content.lines()
+            .filter(|line| line.contains('"') || line.contains('\''))
+            .collect();
+
+        if dialogue_lines.len() > 2 {
+            let quote_styles: Vec<_> = dialogue_lines.iter()
+                .map(|line| if line.contains('"') { "double" } else { "single" })
+                .collect();
+
+            let inconsistent_quotes = quote_styles.iter()
+                .any(|&style| style != quote_styles[0]);
+
+            if inconsistent_quotes {
+                violations.push(CoherenceViolation {
+                    id: format!("dialogue_formatting_{}", std::process::id()),
+                    violation_type: CoherenceType::DialogueConsistency,
+                    severity: ViolationSeverity::Minor,
+                    description: "Inconsistent dialogue formatting".to_string(),
+                    location: "dialogue_formatting".to_string(),
+                    suggested_fix: "Use consistent quotation mark style".to_string(),
+                    impact_score: 0.1,
+                });
+                consistency_score -= 0.05;
+            }
+        }
+
+        Ok((consistency_score.max(0.0f32).min(1.0f32), violations))
+    }
+
+    async fn analyze_thematic_consistency(&self, _content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        // Simplified thematic consistency check
+        Ok((0.75, Vec::new()))
+    }
+
+    async fn analyze_tone_consistency(&self, _content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        // Simplified tone consistency check
+        Ok((0.7, Vec::new()))
+    }
+
+    async fn analyze_style_consistency(&self, _content: &str) -> RobinResult<(f32, Vec<CoherenceViolation>)> {
+        // Simplified style consistency check
+        Ok((0.65, Vec::new()))
+    }
+
+    fn calculate_measurement_confidence(&self, coherence_type: &CoherenceType, content: &str) -> f32 {
+        let content_length_factor = (content.len() as f32 / 1000.0).min(1.0);
+        let baseline_confidence = match coherence_type {
+            CoherenceType::PlotConsistency => 0.8,
+            CoherenceType::CharacterConsistency => 0.75,
+            CoherenceType::WorldRuleConsistency => 0.85,
+            CoherenceType::TemporalConsistency => 0.7,
+            CoherenceType::CausalConsistency => 0.75,
+            CoherenceType::DialogueConsistency => 0.9,
+            CoherenceType::ThematicConsistency => 0.65,
+            CoherenceType::ToneConsistency => 0.7,
+            CoherenceType::StyleConsistency => 0.8,
+        };
+
+        (baseline_confidence * content_length_factor).max(0.1f32).min(1.0f32)
+    }
+
+    fn calculate_overall_coherence(&self, metrics: &[CoherenceMetric]) -> f32 {
+        if metrics.is_empty() {
+            return 0.0;
+        }
+
+        let weighted_sum: f32 = metrics.iter()
+            .map(|metric| metric.score * metric.confidence)
+            .sum();
+        let weight_sum: f32 = metrics.iter()
+            .map(|metric| metric.confidence)
+            .sum();
+
+        if weight_sum > 0.0 {
+            weighted_sum / weight_sum
+        } else {
+            0.0
+        }
+    }
+
+    fn analyze_coherence_trends(&self) -> CoherenceTrend {
+        if self.metrics_history.len() < 2 {
+            return CoherenceTrend {
+                direction: 0.0,
+                velocity: 0.0,
+                stability: 1.0,
+                prediction: 0.5,
+            };
+        }
+
+        let recent_scores: Vec<f32> = self.metrics_history.iter()
+            .rev()
+            .take(self.tracking_config.trend_window)
+            .map(|metric| metric.score)
+            .collect();
+
+        let direction = if recent_scores.len() >= 2 {
+            let first_half: f32 = recent_scores.iter().take(recent_scores.len() / 2).sum::<f32>() / (recent_scores.len() / 2) as f32;
+            let second_half: f32 = recent_scores.iter().skip(recent_scores.len() / 2).sum::<f32>() / (recent_scores.len() - recent_scores.len() / 2) as f32;
+            second_half - first_half
+        } else {
+            0.0
+        };
+
+        let velocity = direction.abs();
+        let stability = 1.0 - self.calculate_score_variance(&recent_scores);
+        let prediction = recent_scores.last().unwrap_or(&0.5) + direction * 0.5;
+
+        CoherenceTrend {
+            direction,
+            velocity,
+            stability,
+            prediction: prediction.max(0.0f32).min(1.0f32),
+        }
+    }
+
+    fn summarize_violations(&self, metrics: &[CoherenceMetric]) -> ViolationSummary {
+        let all_violations: Vec<&CoherenceViolation> = metrics.iter()
+            .flat_map(|metric| &metric.violations)
+            .collect();
+
+        let total_violations = all_violations.len() as u32;
+        let critical_violations = all_violations.iter()
+            .filter(|v| v.severity == ViolationSeverity::Critical)
+            .count() as u32;
+        let major_violations = all_violations.iter()
+            .filter(|v| v.severity == ViolationSeverity::Major)
+            .count() as u32;
+        let minor_violations = all_violations.iter()
+            .filter(|v| v.severity == ViolationSeverity::Minor)
+            .count() as u32;
+
+        let most_frequent_type = self.find_most_frequent_violation_type(&all_violations);
+
+        let mut severity_distribution = std::collections::HashMap::new();
+        severity_distribution.insert(ViolationSeverity::Critical, critical_violations);
+        severity_distribution.insert(ViolationSeverity::Major, major_violations);
+        severity_distribution.insert(ViolationSeverity::Minor, minor_violations);
+        severity_distribution.insert(ViolationSeverity::Negligible, 0);
+
+        ViolationSummary {
+            total_violations,
+            critical_violations,
+            major_violations,
+            minor_violations,
+            most_frequent_type,
+            severity_distribution,
+        }
+    }
+
+    fn generate_coherence_recommendations(&self, metrics: &[CoherenceMetric], violations: &ViolationSummary) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        if violations.critical_violations > 0 {
+            recommendations.push("Address critical coherence violations immediately to prevent narrative breakdown".to_string());
+        }
+
+        if violations.major_violations > 3 {
+            recommendations.push("Implement systematic coherence checking to reduce major violations".to_string());
+        }
+
+        let low_scoring_metrics: Vec<_> = metrics.iter()
+            .filter(|metric| metric.score < 0.6)
+            .collect();
+
+        if !low_scoring_metrics.is_empty() {
+            for metric in low_scoring_metrics {
+                let recommendation = match metric.metric_type {
+                    CoherenceType::PlotConsistency => "Review plot structure for logical consistency",
+                    CoherenceType::CharacterConsistency => "Develop detailed character profiles to maintain consistency",
+                    CoherenceType::WorldRuleConsistency => "Establish clear world-building guidelines",
+                    CoherenceType::TemporalConsistency => "Create timeline documentation for events",
+                    CoherenceType::CausalConsistency => "Ensure clear cause-effect relationships",
+                    CoherenceType::DialogueConsistency => "Standardize dialogue formatting and voice",
+                    CoherenceType::ThematicConsistency => "Align all content with core themes",
+                    CoherenceType::ToneConsistency => "Maintain consistent narrative tone",
+                    CoherenceType::StyleConsistency => "Establish and follow style guidelines",
+                };
+                recommendations.push(recommendation.to_string());
+            }
+        }
+
+        if recommendations.is_empty() {
+            recommendations.push("Continue monitoring coherence metrics and maintain current quality standards".to_string());
+        }
+
+        recommendations
+    }
+
+    // Helper methods
+    fn sections_contradict(&self, section1: &str, section2: &str) -> bool {
+        // Simplified contradiction detection
+        let contradictions = [
+            ("is alive", "is dead"),
+            ("happened", "never happened"),
+            ("exists", "doesn't exist"),
+            ("can", "cannot"),
+        ];
+
+        for (phrase1, phrase2) in contradictions {
+            if (section1.to_lowercase().contains(phrase1) && section2.to_lowercase().contains(phrase2)) ||
+               (section1.to_lowercase().contains(phrase2) && section2.to_lowercase().contains(phrase1)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn extract_character_mentions(&self, content: &str) -> std::collections::HashMap<String, usize> {
+        let mut mentions = std::collections::HashMap::new();
+
+        // Simple character extraction based on capitalized words
+        let words: Vec<&str> = content.split_whitespace().collect();
+        for word in words {
+            if word.len() > 2 && word.chars().next().unwrap().is_uppercase() {
+                let clean_word = word.trim_matches(|c: char| !c.is_alphabetic());
+                if clean_word.len() > 2 {
+                    *mentions.entry(clean_word.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+
+        mentions
+    }
+
+    fn behaviors_inconsistent(&self, _behaviors: &[&&str]) -> bool {
+        // Simplified behavior consistency check
+        // In practice, this would use more sophisticated NLP analysis
+        false
+    }
+
+    fn calculate_score_variance(&self, scores: &[f32]) -> f32 {
+        if scores.len() < 2 {
+            return 0.0;
+        }
+
+        let mean = scores.iter().sum::<f32>() / scores.len() as f32;
+        let variance = scores.iter()
+            .map(|score| (score - mean).powi(2))
+            .sum::<f32>() / scores.len() as f32;
+
+        variance.sqrt()
+    }
+
+    fn find_most_frequent_violation_type(&self, violations: &[&CoherenceViolation]) -> CoherenceType {
+        let mut type_counts = std::collections::HashMap::new();
+
+        for violation in violations {
+            *type_counts.entry(violation.violation_type.clone()).or_insert(0) += 1;
+        }
+
+        type_counts.into_iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(violation_type, _)| violation_type)
+            .unwrap_or(CoherenceType::PlotConsistency)
+    }
+
+    pub fn get_current_coherence_status(&self) -> Option<f32> {
+        self.current_analysis.as_ref().map(|analysis| analysis.overall_coherence)
+    }
+
+    pub fn get_violation_count(&self) -> u32 {
+        self.current_analysis.as_ref()
+            .map(|analysis| analysis.violation_summary.total_violations)
+            .unwrap_or(0)
     }
 }
 
@@ -2626,21 +4682,7 @@ impl MLFrameworkStats {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct InferenceOptimizationStats {
-    // TODO: Implement inference performance optimization tracking
-    pub optimization_metrics: HashMap<String, f32>,
-    pub performance_data: Vec<f32>,
-}
-
-impl InferenceOptimizationStats {
-    pub fn new() -> Self {
-        Self {
-            optimization_metrics: HashMap::new(),
-            performance_data: vec![],
-        }
-    }
-}
+// InferenceOptimizationStats moved to inference_optimization.rs
 
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeValue {

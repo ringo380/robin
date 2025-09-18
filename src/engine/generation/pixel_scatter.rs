@@ -644,14 +644,19 @@ impl PixelScatterSystem {
     /// Generate forest environment scatter
     fn generate_forest_scatter(&mut self, params: &EnvironmentParams, heightmap: &Heightmap) -> RobinResult<PointCloud> {
         let mut points = Vec::new();
-        let area = 1024.0 * 1024.0; // TODO: Get actual world size from heightmap or other source
+
+        // Use actual world dimensions from environment parameters
+        let world_width = params.dimensions.x;
+        let world_height = params.dimensions.y;
+        let world_depth = params.dimensions.z;
+        let area = world_width * world_depth;
         let base_density = 0.1; // Default density value
 
         // Generate trees using clustered distribution
         let tree_count = (area * base_density * 0.01) as usize;
         for _ in 0..tree_count {
-            let x = fastrand::f32() * 1024.0; // TODO: Use actual world dimensions
-            let z = fastrand::f32() * 1024.0; // TODO: Use actual world dimensions
+            let x = fastrand::f32() * world_width;
+            let z = fastrand::f32() * world_depth;
             let y = heightmap.get_height(x as usize, z as usize);
 
             self.generate_tree_scatter_points(&mut points, Vec3::new(x, y, z), params)?;
@@ -669,7 +674,7 @@ impl PixelScatterSystem {
             density: base_density,
             bounds: (
                 Vec3::new(0.0, 0.0, 0.0),
-                Vec3::new(1024.0, 256.0, 1024.0) // TODO: Use actual world dimensions (width, height, depth)
+                Vec3::new(world_width, world_height, world_depth)
             ),
             metadata: HashMap::new(),
         })

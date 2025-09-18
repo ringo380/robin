@@ -139,10 +139,10 @@ impl GenerationEngine {
     pub fn generate_character(&mut self, params: CharacterParams) -> RobinResult<GeneratedCharacter> {
         let cache_key = params.get_cache_key();
         
-        // TODO: Implement cache with proper Arc sharing once Clone is resolved
-        // if let Some(cached) = self.cache.get_character(&cache_key) {
-        //     return Ok(cached.clone());
-        // }
+        // Check cache for existing character
+        if let Some(cached) = self.cache.get_character(&cache_key) {
+            return Ok(cached);
+        }
 
         let character = match params.style {
             GenerationStyle::Voxel => {
@@ -168,8 +168,8 @@ impl GenerationEngine {
             }
         };
 
-        // TODO: Implement cache with proper Arc sharing once Clone is resolved  
-        // self.cache.store_character(cache_key, character.clone());
+        // Store generated character in cache
+        self.cache.store_character(cache_key, character.clone());
         Ok(character)
     }
 
@@ -177,10 +177,10 @@ impl GenerationEngine {
     pub fn generate_environment(&mut self, params: EnvironmentParams) -> RobinResult<GeneratedEnvironment> {
         let cache_key = params.get_cache_key();
         
-        // TODO: Implement cache with proper Arc sharing once Clone is resolved
-        // if let Some(cached) = self.cache.get_environment(&cache_key) {
-        //     return Ok(cached.clone());
-        // }
+        // Check cache for existing environment
+        if let Some(cached) = self.cache.get_environment(&cache_key) {
+            return Ok(cached);
+        }
 
         // Generate base terrain using noise functions
         let terrain_params = TerrainParams {
@@ -231,8 +231,8 @@ impl GenerationEngine {
             }
         };
 
-        // TODO: Implement cache with proper Arc sharing once Clone is resolved  
-        // self.cache.store_environment(cache_key, environment.clone());
+        // Store generated environment in cache
+        self.cache.store_environment(cache_key, environment.clone());
         Ok(environment)
     }
 
@@ -721,10 +721,10 @@ impl GenerationCache {
         }
     }
 
-    fn get_character(&mut self, key: &str) -> Option<&GeneratedCharacter> {
+    fn get_character(&mut self, key: &str) -> Option<GeneratedCharacter> {
         if let Some(character) = self.characters.get(key) {
             self.hits += 1;
-            Some(character)
+            Some(character.clone())
         } else {
             self.misses += 1;
             None
@@ -742,10 +742,10 @@ impl GenerationCache {
         self.current_size += estimated_size;
     }
 
-    fn get_environment(&mut self, key: &str) -> Option<&GeneratedEnvironment> {
+    fn get_environment(&mut self, key: &str) -> Option<GeneratedEnvironment> {
         if let Some(env) = self.environments.get(key) {
             self.hits += 1;
-            Some(env)
+            Some(env.clone())
         } else {
             self.misses += 1;
             None

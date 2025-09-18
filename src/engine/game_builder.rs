@@ -4,9 +4,10 @@ use crate::engine::{
     scene::{Scene, GameObject, SceneManager, SceneTemplate},
     physics::{PhysicsWorld, RigidBody, Collider, ColliderShape},
     audio::AudioManager,
-    ui::{UIManager, Button, Label, Panel, Slider, ProgressBar, UIBounds, Anchor, ElementId},
+    ui::{UIManager, legacy_components::{Button, Label, Panel, Slider, ProgressBar}, UIBounds, Anchor, ElementId},
     assets::{HotReloadSystem, HotReloadSystemBuilder, AssetConfig, HotReloadEvent, AssetPipeline, AssetImporter, AssetType, ImporterConfig, PipelineConfig},
     save_system::{SaveManager, SaveSystemConfig, GameState, UserProfile, ProfileManager},
+    ai_game::{GameAIManager, PlayerProfile, PlayerInteraction, GameAIEvent, GameAIRecommendation},
     error::{RobinError, RobinResult},
     logging::{RobinLogger, LoggingConfig, PerformanceMetrics},
     diagnostics::{DiagnosticsManager, DiagnosticsConfig},
@@ -49,6 +50,7 @@ pub struct GameBuilder {
     pub asset_importer: AssetImporter,
     pub save_manager: SaveManager,
     pub profile_manager: ProfileManager,
+    pub ai_game_manager: GameAIManager,
     pub lights: Vec<Light>,
     effects_counter: u32,
     physics_body_counter: u32,
@@ -145,6 +147,7 @@ impl GameBuilder {
             asset_importer,
             save_manager,
             profile_manager,
+            ai_game_manager: GameAIManager::new(),
             lights: Vec::new(),
             effects_counter: 0,
             physics_body_counter: 0,
@@ -1855,5 +1858,112 @@ impl GameBuilder {
         
         // Frame timer automatically completes when dropped
         animation_result
+    }
+
+    // === AI GAME SYSTEMS ===
+
+    /// Start tracking a player for AI analysis and adaptation
+    pub fn start_player_session(&mut self, player_id: &str, player_profile: PlayerProfile) -> RobinResult<()> {
+        self.ai_game_manager.start_player_session(player_id, player_profile)
+    }
+
+    /// End a player session and get summary analytics
+    pub fn end_player_session(&mut self, player_id: &str) -> RobinResult<PlayerProfile> {
+        self.ai_game_manager.end_player_session(player_id)
+    }
+
+    /// Record a player interaction for AI analysis
+    pub fn record_player_interaction(&mut self, player_id: &str, interaction: PlayerInteraction) -> RobinResult<Vec<GameAIEvent>> {
+        self.ai_game_manager.process_player_interaction(player_id, &interaction)
+    }
+
+    /// Get AI-powered recommendations for a player
+    pub fn get_ai_recommendations(&self, player_id: &str) -> RobinResult<Vec<GameAIRecommendation>> {
+        self.ai_game_manager.get_recommendations(player_id)
+    }
+
+    /// Generate procedural content based on player preferences
+    pub fn generate_procedural_content(&mut self, player_id: &str, content_type: &str, parameters: HashMap<String, f32>) -> RobinResult<String> {
+        self.ai_game_manager.generate_content(player_id, content_type, parameters)
+    }
+
+    /// Adjust game difficulty dynamically based on player performance
+    pub fn adjust_difficulty(&mut self, player_id: &str, target_flow_state: f32) -> RobinResult<f32> {
+        self.ai_game_manager.adjust_difficulty(player_id, target_flow_state)
+    }
+
+    /// Get current player analytics and performance metrics
+    pub fn get_player_analytics(&self, player_id: &str) -> Option<HashMap<String, f32>> {
+        self.ai_game_manager.get_player_metrics(player_id)
+    }
+
+    /// Update AI systems and get generated events
+    pub fn update_ai_systems(&mut self, delta_time: f32) -> RobinResult<Vec<GameAIEvent>> {
+        self.ai_game_manager.update(delta_time)
+    }
+
+    /// Enable or disable AI systems for privacy or performance
+    pub fn set_ai_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.ai_game_manager.set_enabled(enabled);
+        self
+    }
+
+    /// Get AI system status and health metrics
+    pub fn get_ai_status(&self) -> HashMap<String, String> {
+        self.ai_game_manager.get_status()
+    }
+
+    /// Trigger AI rebalancing of game systems
+    pub fn rebalance_game_systems(&mut self, focus_areas: Vec<String>) -> RobinResult<HashMap<String, f32>> {
+        self.ai_game_manager.rebalance_systems(focus_areas)
+    }
+
+    /// Create a customized game experience for a player
+    pub fn create_personalized_experience(&mut self, player_id: &str, experience_type: &str) -> RobinResult<String> {
+        self.ai_game_manager.create_personalized_experience(player_id, experience_type)
+    }
+
+    /// Analyze player behavior patterns and predict preferences
+    pub fn analyze_player_behavior(&self, player_id: &str) -> RobinResult<HashMap<String, f32>> {
+        self.ai_game_manager.analyze_behavior_patterns(player_id)
+    }
+
+    /// Get global game analytics across all players
+    pub fn get_global_analytics(&self) -> HashMap<String, f32> {
+        self.ai_game_manager.get_global_metrics()
+    }
+
+    /// Export player data for external analysis (respecting privacy)
+    pub fn export_player_data(&self, player_id: &str, include_personal: bool) -> RobinResult<String> {
+        self.ai_game_manager.export_player_data(player_id, include_personal)
+    }
+
+    /// Import player preferences and settings
+    pub fn import_player_preferences(&mut self, player_id: &str, preferences: HashMap<String, f32>) -> RobinResult<()> {
+        self.ai_game_manager.import_player_preferences(player_id, preferences)
+    }
+
+    /// Quick setup for common AI features
+    pub fn enable_ai_features(&mut self, features: Vec<&str>) -> &mut Self {
+        for feature in features {
+            match feature {
+                "analytics" => { self.ai_game_manager.enable_analytics(true); },
+                "adaptation" => { self.ai_game_manager.enable_adaptation(true); },
+                "generation" => { self.ai_game_manager.enable_generation(true); },
+                "balancing" => { self.ai_game_manager.enable_balancing(true); },
+                _ => log::warn!("Unknown AI feature: {}", feature),
+            }
+        }
+        self
+    }
+
+    /// Create AI-powered tutorial system
+    pub fn create_ai_tutorial(&mut self, player_id: &str, tutorial_type: &str) -> RobinResult<Vec<String>> {
+        self.ai_game_manager.create_adaptive_tutorial(player_id, tutorial_type)
+    }
+
+    /// Generate dynamic quests based on player progression
+    pub fn generate_dynamic_quest(&mut self, player_id: &str, difficulty: f32) -> RobinResult<String> {
+        self.ai_game_manager.generate_dynamic_quest(player_id, difficulty)
     }
 }

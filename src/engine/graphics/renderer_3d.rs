@@ -322,6 +322,15 @@ impl BoundingBox {
     }
 }
 
+impl Default for BoundingBox {
+    fn default() -> Self {
+        Self {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(1.0, 1.0, 1.0),
+        }
+    }
+}
+
 impl<'a> Renderer3D<'a> {
     pub async fn new(
         window: &'a winit::window::Window,

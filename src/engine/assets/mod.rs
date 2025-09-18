@@ -12,12 +12,33 @@ pub mod registry;
 pub mod watcher;
 pub mod pipeline;
 pub mod importer;
+pub mod database;
+pub mod hot_reload_optimized;
+pub mod parallel_processor;
+pub mod optimized_database;
+pub mod optimized_hot_reload;
 
 pub use hot_reload::*;
 pub use registry::*;
 pub use watcher::*;
 pub use pipeline::*;
 pub use importer::*;
+pub use database::*;
+pub use hot_reload_optimized::{
+    OptimizedHotReloadSystem, HotReloadConfig, HotReloadMetrics, HotReloadPerformanceReport
+};
+pub use parallel_processor::{
+    ParallelAssetProcessor, ParallelProcessorConfig, ProcessingTask, ProcessingResult,
+    TaskPriority, MappedFile, ProcessorStats
+};
+pub use optimized_database::{
+    OptimizedAssetDatabase, OptimizedDatabaseConfig, DatabaseMetrics
+};
+pub use optimized_hot_reload::{
+    OptimizedHotReloadSystem as NewOptimizedHotReloadSystem,
+    OptimizedHotReloadConfig, HotReloadMetrics as NewHotReloadMetrics,
+    HotReloadPerformanceReport as NewHotReloadPerformanceReport
+};
 
 /// Legacy asset trait for compatibility
 pub trait Asset {

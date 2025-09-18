@@ -9,7 +9,7 @@ pub enum UIEvent {
     /// Mouse click event
     Click {
         element_id: ElementId,
-        position: Vec2,
+        position: (f32, f32),
     },
     /// Mouse hover enter event
     HoverEnter {

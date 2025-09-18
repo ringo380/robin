@@ -47,6 +47,7 @@ pub enum RobinError {
         asset_type: String,
         searched_paths: Vec<PathBuf>,
     },
+    DatabaseError(String),
     AssetLoadError {
         asset_id: String,
         path: PathBuf,
@@ -274,6 +275,7 @@ pub enum RobinError {
     VRSystem(String),
     Story(String),
     AssistanceError(String),
+    Other(String),
 }
 
 impl fmt::Display for RobinError {
@@ -315,6 +317,9 @@ impl fmt::Display for RobinError {
             // Asset errors
             RobinError::AssetNotFound { asset_id, asset_type, searched_paths } => {
                 write!(f, "{} asset '{}' not found. Searched paths: {:?}", asset_type, asset_id, searched_paths)
+            }
+            RobinError::DatabaseError(reason) => {
+                write!(f, "Database error: {}", reason)
             }
             RobinError::AssetLoadError { asset_id, path, reason } => {
                 write!(f, "Failed to load asset '{}' from '{}': {}", asset_id, path.display(), reason)
@@ -574,6 +579,9 @@ impl fmt::Display for RobinError {
             RobinError::AssistanceError(reason) => {
                 write!(f, "AI assistance error: {}", reason)
             }
+            RobinError::Other(reason) => {
+                write!(f, "Other error: {}", reason)
+            }
             RobinError::BehaviorTreeError { tree_id, node_id, error } => {
                 match node_id {
                     Some(node) => write!(f, "Behavior tree error in '{}' at node '{}': {}", tree_id, node, error),
@@ -672,6 +680,80 @@ impl From<String> for RobinError {
 impl From<Box<dyn std::error::Error>> for RobinError {
     fn from(error: Box<dyn std::error::Error>) -> Self {
         RobinError::GeneralError(error.to_string())
+    }
+}
+
+impl From<crate::engine::assets::AssetError> for RobinError {
+    fn from(error: crate::engine::assets::AssetError) -> Self {
+        match error {
+            crate::engine::assets::AssetError::FileNotFound(path) => {
+                RobinError::FileNotFound(path)
+            }
+            crate::engine::assets::AssetError::LoadFailed(msg) => {
+                RobinError::AssetLoadError {
+                    asset_id: "unknown".to_string(),
+                    path: PathBuf::from("unknown"),
+                    reason: msg,
+                }
+            }
+            crate::engine::assets::AssetError::UnsupportedFormat(format) => {
+                RobinError::AssetParseError {
+                    asset_id: "unknown".to_string(),
+                    format,
+                    line: None,
+                    column: None,
+                    message: "Unsupported format".to_string(),
+                }
+            }
+            crate::engine::assets::AssetError::FileTooLarge(size) => {
+                RobinError::AssetLoadError {
+                    asset_id: "unknown".to_string(),
+                    path: PathBuf::from("unknown"),
+                    reason: format!("File too large: {} bytes", size),
+                }
+            }
+            crate::engine::assets::AssetError::PermissionDenied(path) => {
+                RobinError::FileAccessDenied(path)
+            }
+            crate::engine::assets::AssetError::WatcherError(msg) => {
+                RobinError::HotReloadError(msg)
+            }
+            crate::engine::assets::AssetError::SerializationError(msg) => {
+                RobinError::SerializationError {
+                    object_type: "unknown".to_string(),
+                    reason: msg,
+                }
+            }
+            crate::engine::assets::AssetError::InvalidPath(msg) => {
+                RobinError::InvalidInput(msg)
+            }
+        }
+    }
+}
+
+impl From<std::num::ParseIntError> for RobinError {
+    fn from(error: std::num::ParseIntError) -> Self {
+        RobinError::ValidationError {
+            field: "number_parsing".to_string(),
+            value: "unknown".to_string(),
+            constraint: format!("Failed to parse integer: {}", error),
+        }
+    }
+}
+
+impl From<std::num::ParseFloatError> for RobinError {
+    fn from(error: std::num::ParseFloatError) -> Self {
+        RobinError::ValidationError {
+            field: "number_parsing".to_string(),
+            value: "unknown".to_string(),
+            constraint: format!("Failed to parse float: {}", error),
+        }
+    }
+}
+
+impl From<glob::PatternError> for RobinError {
+    fn from(error: glob::PatternError) -> Self {
+        RobinError::InvalidInput(format!("Invalid glob pattern: {}", error))
     }
 }
 

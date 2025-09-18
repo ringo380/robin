@@ -1,0 +1,15 @@
+[package]
+name = "voxel-demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+winit = "0.29"
+wgpu = "0.20"
+bytemuck = { version = "1.23", features = ["derive"] }
+pollster = "0.3"
+
+[[bin]]
+name = "voxel-demo"
+path = "src/main.rs"
+

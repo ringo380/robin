@@ -7,10 +7,10 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 pub mod vr_systems;
+pub mod ar_systems;
+pub mod spatial_ui;
+pub mod cross_reality;
 // TODO: Implement these immersive submodules
-// pub mod ar_systems;
-// pub mod spatial_ui;
-// pub mod cross_reality;
 // pub mod haptic_feedback;
 
 // Temporary local definitions until submodules are implemented
@@ -20,91 +20,6 @@ pub enum HapticPattern {
     Success,
     Notification,
     Error,
-}
-
-// Temporary AR system placeholder
-pub mod ar_systems {
-    use super::*;
-
-    #[derive(Debug)]
-    pub struct ARSystem {
-        pub tracking_enabled: bool,
-        pub anchor_points: Vec<Vector3<f32>>,
-    }
-
-    impl ARSystem {
-        pub fn new() -> crate::engine::error::RobinResult<Self> {
-            Ok(Self {
-                tracking_enabled: false,
-                anchor_points: Vec::new(),
-            })
-        }
-
-        pub fn initialize(&mut self) -> crate::engine::error::RobinResult<()> {
-            // Stub implementation for AR system initialization
-            self.tracking_enabled = true;
-            log::info!("AR system initialized");
-            Ok(())
-        }
-
-        pub fn shutdown(&mut self) -> crate::engine::error::RobinResult<()> {
-            // Stub implementation for AR system shutdown
-            self.tracking_enabled = false;
-            self.anchor_points.clear();
-            log::info!("AR system shutdown");
-            Ok(())
-        }
-
-        pub fn activate(&mut self) -> crate::engine::error::RobinResult<()> {
-            self.tracking_enabled = true;
-            Ok(())
-        }
-
-        pub fn update(&mut self, _delta_time: f32, _tracking_data: &super::TrackingData) -> crate::engine::error::RobinResult<Vec<super::ImmersiveEvent>> {
-            // Stub implementation for AR system update
-            Ok(Vec::new())
-        }
-
-        pub fn is_available(&self) -> bool {
-            // Stub implementation - assume AR is not available for now
-            false
-        }
-
-        pub fn supports_hand_tracking(&self) -> bool {
-            // Stub implementation
-            false
-        }
-
-        pub fn supports_spatial_anchors(&self) -> bool {
-            // Stub implementation
-            false
-        }
-
-        pub fn world_to_ar_space(&self, world_pos: Vector3<f32>) -> Vector3<f32> {
-            // Stub implementation - return world position unchanged
-            world_pos
-        }
-
-        pub fn detect_hardware(&self) -> bool {
-            // Stub implementation - assume no AR hardware available
-            false
-        }
-
-        pub fn get_head_pose(&self) -> crate::engine::error::RobinResult<super::Pose> {
-            // Stub implementation
-            Ok(super::Pose::default())
-        }
-
-        pub fn get_spatial_anchors(&self) -> crate::engine::error::RobinResult<Vec<super::SpatialAnchor>> {
-            // Stub implementation
-            Ok(Vec::new())
-        }
-
-        pub fn get_hand_pose(&self, _hand: super::Hand) -> crate::engine::error::RobinResult<Option<super::HandPose>> {
-            // Stub implementation
-            Ok(None)
-        }
-    }
 }
 
 /// Main immersive systems coordinator
@@ -121,7 +36,7 @@ pub struct ImmersiveManager {
 }
 
 /// Supported immersive modes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ImmersiveMode {
     Desktop,        // Traditional 2D/3D desktop interface
     VR,             // Full virtual reality immersion
@@ -282,10 +197,7 @@ impl ImmersiveManager {
     pub fn new() -> Self {
         Self {
             vr_system: vr_systems::VRSystem::new(),
-            ar_system: ar_systems::ARSystem::new().unwrap_or_else(|_| ar_systems::ARSystem {
-                tracking_enabled: false,
-                anchor_points: Vec::new(),
-            }),
+            ar_system: ar_systems::ARSystem::new().unwrap_or_else(|_| ar_systems::ARSystem::default()),
             spatial_ui: SpatialUIManager::new(),
             cross_reality: CrossRealityBridge::new(),
             haptics: HapticSystem::new(),
@@ -381,14 +293,14 @@ impl ImmersiveManager {
                 events.extend(ar_events.into_iter().map(ImmersiveEvent::from));
             },
             ImmersiveMode::Spatial => {
-                let spatial_events = self.spatial_ui.update(delta_time, &self.tracking_data)?;
-                events.extend(spatial_events.into_iter().map(ImmersiveEvent::from));
+                self.spatial_ui.update(delta_time)?;
+                // Spatial UI doesn't return events directly
             },
         }
         
         // Update cross-reality bridge
-        let bridge_events = self.cross_reality.update(delta_time, &self.tracking_data)?;
-        events.extend(bridge_events.into_iter().map(ImmersiveEvent::from));
+        let _bridge_events = self.cross_reality.update(delta_time, &self.tracking_data)?;
+        // TODO: Convert CrossRealityEvent to ImmersiveEvent when needed
         
         // Update haptic feedback
         self.haptics.update(delta_time)?;
@@ -628,69 +540,33 @@ impl From<vr_systems::VREvent> for ImmersiveEvent {
 
 // Placeholder implementations for missing immersive components
 
-#[derive(Debug)]
-pub struct SpatialUIManager {
-    // Placeholder
-}
+// Type alias to the actual spatial UI implementation
+pub type SpatialUIManager = spatial_ui::SpatialUISystem;
 
-impl Default for SpatialUIManager {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-impl SpatialUIManager {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
+// Extension methods for compatibility
+impl spatial_ui::SpatialUISystem {
     pub fn initialize(&mut self) -> RobinResult<()> {
-        // Placeholder implementation
+        // Initialize spatial UI system
         Ok(())
     }
 
     pub fn enable_spatial_mode(&mut self) -> RobinResult<()> {
-        // Placeholder implementation
+        // Enable spatial mode
         Ok(())
     }
 
-    pub fn update(&mut self, _delta_time: f32, _tracking_data: &TrackingData) -> RobinResult<Vec<SpatialEvent>> {
-        // Placeholder implementation
+    pub fn update_with_tracking(&mut self, delta_time: f32, _tracking_data: &TrackingData) -> RobinResult<Vec<SpatialEvent>> {
+        // Update spatial UI with tracking data
+        self.update(delta_time)?;
         Ok(Vec::new())
     }
 }
 
-#[derive(Debug)]
-pub struct CrossRealityBridge {
-    // Placeholder
-}
+// Type alias to the actual cross-reality implementation
+pub type CrossRealityBridge = cross_reality::CrossRealityBridge;
 
-impl Default for CrossRealityBridge {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-impl CrossRealityBridge {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn initialize(&mut self) -> RobinResult<()> {
-        // Placeholder implementation
-        Ok(())
-    }
-
-    pub fn handle_mode_change(&mut self, _previous_mode: ImmersiveMode, _mode: ImmersiveMode) -> RobinResult<()> {
-        // Placeholder implementation
-        Ok(())
-    }
-
-    pub fn update(&mut self, _delta_time: f32, _tracking_data: &TrackingData) -> RobinResult<Vec<BridgeEvent>> {
-        // Placeholder implementation
-        Ok(Vec::new())
-    }
-}
+// Re-export event types from submodules
+pub use cross_reality::CrossRealityEvent;
 
 #[derive(Debug)]
 pub struct HapticSystem {

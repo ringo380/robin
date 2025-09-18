@@ -6,6 +6,10 @@ pub mod chunk_manager;
 pub mod gpu_acceleration;
 pub mod memory_management;
 pub mod background_processing;
+pub mod benchmarks;
+pub mod monitoring;
+pub mod enhanced_memory_management;
+pub mod comprehensive_monitoring;
 
 pub use lod_system::{
     LODSystem, LODLevel, LODConfig, RenderableObject, LODMetrics
@@ -25,6 +29,27 @@ pub use memory_management::{
 
 pub use background_processing::{
     BackgroundProcessor, TaskPriority, BackgroundTask, ProcessorConfig, BackgroundStats as ProcessorMetrics
+};
+
+pub use benchmarks::{
+    PerformanceBenchmarkSuite, BenchmarkConfig, PerformanceTargets, Benchmark, BenchmarkCategory,
+    BenchmarkMetrics, BenchmarkRunResult, BenchmarkSuiteResult, ExportFormat
+};
+
+pub use monitoring::{
+    PerformanceMonitor, MonitoringConfig, SystemMetrics, PerformanceSample, UIPerformanceMetrics,
+    DatabasePerformanceMetrics, HotReloadPerformanceMetrics, AlertRule, AlertSeverity, AlertEvent,
+    DashboardData, MetricsCollector
+};
+
+pub use enhanced_memory_management::{
+    EnhancedMemoryManager, EnhancedMemoryConfig, EnhancedMemoryStats, EnhancedMultiLevelCache,
+    EnhancedMemoryPool, EnhancedPooledMemory, BumpAllocatorPool
+};
+
+pub use comprehensive_monitoring::{
+    ComprehensiveMonitoringSystem, MonitoringConfig as ComprehensiveMonitoringConfig,
+    PerformanceMetrics, PerformanceAlert, PerformanceReport as ImportedPerformanceReport, PerformanceThresholds
 };
 
 use crate::engine::error::RobinResult;

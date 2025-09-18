@@ -367,7 +367,7 @@ impl VoxelSystem {
         let normal_map_id = format!("surface_normal_{}", params.get_cache_key());
 
         Ok(GeneratedSurface {
-            mesh: Mesh::default(), // TODO: Generate actual mesh from voxels
+            mesh: self.generate_surface_mesh(&surface_grid, &params)?,
             texture_id,
             voxel_grid: surface_grid,
             normal_map_id,
@@ -867,6 +867,136 @@ impl VoxelSystem {
     fn calculate_surface_properties(&mut self, params: &SurfaceParams) -> MaterialProperties { MaterialProperties::default() }
     fn generate_creature_features(&mut self, grid: &mut VoxelGrid, center: &Vec3, params: &CharacterParams) -> RobinResult<()> { Ok(()) }
     fn generate_robot_details(&mut self, grid: &mut VoxelGrid, center: &Vec3, scale: f32, accent_color: Color) -> RobinResult<()> { Ok(()) }
+
+    /// Generate surface mesh from voxel data using face culling algorithm
+    fn generate_surface_mesh(&self, grid: &VoxelGrid, params: &SurfaceParams) -> RobinResult<Mesh> {
+        use crate::engine::graphics::mesh::{Mesh, Vertex};
+        use crate::engine::math::{Vec2, Vec3};
+
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+        let mut vertex_index = 0;
+
+        // Iterate through voxel grid and generate faces for visible voxels
+        for x in 0..grid.size.0 {
+            for y in 0..grid.size.1 {
+                for z in 0..grid.size.2 {
+                    if let Some(voxel) = grid.get_voxel(x, y, z) {
+                        if voxel.voxel_type != VoxelType::Air {
+                            // Generate faces for this voxel if it has air neighbors
+                            let world_pos = Vec3::new(x as f32, y as f32, z as f32);
+
+                            // Check each face direction
+                            let faces = [
+                                (Vec3::new(0.0, 1.0, 0.0), [0, 1, 2, 0, 2, 3]), // Top face
+                                (Vec3::new(0.0, -1.0, 0.0), [4, 7, 6, 4, 6, 5]), // Bottom face
+                                (Vec3::new(1.0, 0.0, 0.0), [8, 11, 10, 8, 10, 9]), // Right face
+                                (Vec3::new(-1.0, 0.0, 0.0), [12, 13, 14, 12, 14, 15]), // Left face
+                                (Vec3::new(0.0, 0.0, 1.0), [16, 17, 18, 16, 18, 19]), // Front face
+                                (Vec3::new(0.0, 0.0, -1.0), [20, 23, 22, 20, 22, 21]), // Back face
+                            ];
+
+                            for (face_normal, face_indices) in faces {
+                                // Check if this face should be rendered (has air neighbor)
+                                let neighbor_pos = world_pos + face_normal;
+                                let should_render = !self.is_solid_voxel(grid,
+                                    neighbor_pos.x as i32,
+                                    neighbor_pos.y as i32,
+                                    neighbor_pos.z as i32);
+
+                                if should_render {
+                                    // Generate quad vertices for this face
+                                    let face_vertices = self.generate_face_vertices(world_pos, face_normal, voxel.color);
+
+                                    // Add vertices
+                                    vertices.extend_from_slice(&face_vertices);
+
+                                    // Add indices (offset by current vertex count)
+                                    for &idx in &face_indices {
+                                        indices.push(vertex_index + idx);
+                                    }
+                                    vertex_index += face_vertices.len() as u32;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Mesh {
+            vertices,
+            indices,
+            name: format!("voxel_mesh_{}", params.get_cache_key()),
+        })
+    }
+
+    /// Check if a voxel position contains a solid voxel
+    fn is_solid_voxel(&self, grid: &VoxelGrid, x: i32, y: i32, z: i32) -> bool {
+        if x < 0 || y < 0 || z < 0 ||
+           x >= grid.size.0 as i32 ||
+           y >= grid.size.1 as i32 ||
+           z >= grid.size.2 as i32 {
+            return false; // Outside bounds is considered air
+        }
+
+        if let Some(voxel) = grid.get_voxel(x as usize, y as usize, z as usize) {
+            voxel.voxel_type != VoxelType::Air
+        } else {
+            false
+        }
+    }
+
+    /// Generate vertices for a single voxel face
+    fn generate_face_vertices(&self, pos: Vec3, normal: Vec3, color: Color) -> Vec<Vertex> {
+        let color_array = [color.r, color.g, color.b, color.a];
+
+        // Generate quad vertices based on face normal
+        match normal {
+            // Top face (Y+)
+            n if n.y > 0.5 => vec![
+                Vertex::new(pos, normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 0.0), normal, Vec2::new(1.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 1.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 1.0, 1.0), normal, Vec2::new(0.0, 1.0), color_array),
+            ],
+            // Bottom face (Y-)
+            n if n.y < -0.5 => vec![
+                Vertex::new(pos, normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 0.0, 1.0), normal, Vec2::new(0.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 1.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 0.0), normal, Vec2::new(1.0, 0.0), color_array),
+            ],
+            // Right face (X+)
+            n if n.x > 0.5 => vec![
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 0.0), normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 1.0), normal, Vec2::new(1.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 1.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 0.0), normal, Vec2::new(0.0, 1.0), color_array),
+            ],
+            // Left face (X-)
+            n if n.x < -0.5 => vec![
+                Vertex::new(pos, normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 1.0, 0.0), normal, Vec2::new(0.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 1.0, 1.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 0.0, 1.0), normal, Vec2::new(1.0, 0.0), color_array),
+            ],
+            // Front face (Z+)
+            n if n.z > 0.5 => vec![
+                Vertex::new(pos + Vec3::new(0.0, 0.0, 1.0), normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 1.0, 1.0), normal, Vec2::new(0.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 1.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 1.0), normal, Vec2::new(1.0, 0.0), color_array),
+            ],
+            // Back face (Z-) - default case
+            _ => vec![
+                Vertex::new(pos, normal, Vec2::new(0.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 0.0, 0.0), normal, Vec2::new(1.0, 0.0), color_array),
+                Vertex::new(pos + Vec3::new(1.0, 1.0, 0.0), normal, Vec2::new(1.0, 1.0), color_array),
+                Vertex::new(pos + Vec3::new(0.0, 1.0, 0.0), normal, Vec2::new(0.0, 1.0), color_array),
+            ]
+        }
+    }
     fn apply_clothing_item(&mut self, grid: &mut VoxelGrid, clothing: &String) -> RobinResult<()> { Ok(()) }
     fn apply_accessory(&mut self, grid: &mut VoxelGrid, accessory: &String) -> RobinResult<()> { Ok(()) }
     fn apply_color_variations(&mut self, grid: &mut VoxelGrid, color_variations: &Vec<String>) -> RobinResult<()> { Ok(()) }

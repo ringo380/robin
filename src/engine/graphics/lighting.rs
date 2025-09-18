@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use cgmath::{Matrix4, Vector3, Vector4, Point3, perspective, Deg, ortho};
 use wgpu::util::DeviceExt;
 use crate::engine::error::RobinResult;
@@ -131,8 +131,8 @@ pub enum AreaLightType {
 }
 
 pub struct ShadowRenderer {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    _device_placeholder: (),
+    _queue_placeholder: (),
     
     // Shadow mapping pipelines
     directional_shadow_pipeline: wgpu::RenderPipeline,
@@ -247,6 +247,8 @@ pub struct TemporalAccumulation {
     history_texture: wgpu::Texture,
     accumulation_pipeline: wgpu::ComputePipeline,
     blend_factor: f32,
+    accumulation_buffer: wgpu::Buffer,
+    frame_count: u32,
 }
 
 pub struct Denoising {
@@ -335,21 +337,15 @@ impl LightingSystem {
         
         // Initialize light clusters
         let light_clusters = LightClusters::new(&device, config.cluster_dimensions)?;
-        
-        // Create shadow renderer - for now just create a dummy one
-        let shadow_renderer = ShadowRenderer {
-            device: todo!(),
-            queue: todo!(),
-            directional_shadow_pipeline: todo!(),
-            point_shadow_pipeline: todo!(),
-            spot_shadow_pipeline: todo!(),
-            csm_pipeline: todo!(),
-            pcf_pipeline: todo!(),
-            variance_shadow_pipeline: todo!(),
+
+        // Create shadow renderer with actual implementations
+        let shadow_renderer = ShadowRenderer::new(
+            &device,
+            &queue,
             shadow_atlas_texture,
             shadow_atlas_view,
             shadow_atlas_sampler,
-        };
+        )?;
         
         // Create bind groups (simplified)
         let lighting_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -402,7 +398,7 @@ impl LightingSystem {
             }],
             label: Some("Shadow Bind Group"),
         });
-        
+
         Ok(Self {
             device,
             queue,
@@ -816,23 +812,203 @@ impl LightClusters {
 // Stub implementations for complex GI systems
 impl ShadowRenderer {
     pub fn new(
-        device: wgpu::Device,
-        queue: wgpu::Queue,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         shadow_atlas_texture: wgpu::Texture,
         shadow_atlas_view: wgpu::TextureView,
         shadow_atlas_sampler: wgpu::Sampler,
     ) -> RobinResult<Self> {
-        // Create shadow rendering pipelines
-        // This is a stub implementation
+        // Create shadow shaders
+        let shadow_vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shadow Vertex Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../gpu/shaders/shadow_vertex.wgsl").into()),
+        });
+
+        let shadow_fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shadow Fragment Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../gpu/shaders/shadow_fragment.wgsl").into()),
+        });
+
+        let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shadow Compute Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../gpu/shaders/shadow_compute.wgsl").into()),
+        });
+
+        // Create render pipeline layout
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Shadow Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        // Create render pipelines for different shadow types
+        let directional_shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Directional Shadow Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_vertex_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shadow_fragment_shader,
+                entry_point: "fs_main",
+                targets: &[],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        // Create separate pipelines for other shadow types
+        let point_shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Point Shadow Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_vertex_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shadow_fragment_shader,
+                entry_point: "fs_main",
+                targets: &[],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        let spot_shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Spot Shadow Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_vertex_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shadow_fragment_shader,
+                entry_point: "fs_main",
+                targets: &[],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        let csm_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("CSM Shadow Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_vertex_shader,
+                entry_point: "vs_main",
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shadow_fragment_shader,
+                entry_point: "fs_main",
+                targets: &[],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        // Create compute pipelines for shadow filtering
+        let pcf_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("PCF Shadow Filter Pipeline"),
+            layout: None,
+            module: &compute_shader,
+            entry_point: "pcf_filter",
+            compilation_options: Default::default(),
+        });
+
+        let variance_shadow_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Variance Shadow Filter Pipeline"),
+            layout: None,
+            module: &compute_shader,
+            entry_point: "variance_filter",
+            compilation_options: Default::default(),
+        });
+
         Ok(Self {
-            device,
-            queue,
-            directional_shadow_pipeline: todo!(), // Would create actual pipelines
-            point_shadow_pipeline: todo!(),
-            spot_shadow_pipeline: todo!(),
-            csm_pipeline: todo!(),
-            pcf_pipeline: todo!(),
-            variance_shadow_pipeline: todo!(),
+            _device_placeholder: (),
+            _queue_placeholder: (),
+            directional_shadow_pipeline,
+            point_shadow_pipeline,
+            spot_shadow_pipeline,
+            csm_pipeline,
+            pcf_pipeline,
+            variance_shadow_pipeline,
             shadow_atlas_texture,
             shadow_atlas_view,
             shadow_atlas_sampler,
@@ -856,9 +1032,11 @@ impl ShadowRenderer {
 impl GlobalIlluminationSystem {
     pub fn new_light_probes(device: &wgpu::Device, queue: &wgpu::Queue) -> RobinResult<Self> {
         // Initialize light probe based GI system
+        let irradiance_volume = IrradianceVolume::new(device)?;
+
         Ok(Self {
             light_probes: Vec::new(),
-            irradiance_volume: todo!(),
+            irradiance_volume,
             voxel_cone_tracing: None,
             screen_space_gi: None,
             ray_traced_gi: None,
@@ -867,10 +1045,13 @@ impl GlobalIlluminationSystem {
     
     pub fn new_voxel_cone_tracing(device: &wgpu::Device, queue: &wgpu::Queue) -> RobinResult<Self> {
         // Initialize voxel cone tracing GI system
+        let irradiance_volume = IrradianceVolume::new(device)?;
+        let voxel_cone_tracing = VoxelConeTracing::new(device)?;
+
         Ok(Self {
             light_probes: Vec::new(),
-            irradiance_volume: todo!(),
-            voxel_cone_tracing: Some(todo!()),
+            irradiance_volume,
+            voxel_cone_tracing: Some(voxel_cone_tracing),
             screen_space_gi: None,
             ray_traced_gi: None,
         })
@@ -878,23 +1059,325 @@ impl GlobalIlluminationSystem {
     
     pub fn new_screen_space_gi(device: &wgpu::Device, queue: &wgpu::Queue) -> RobinResult<Self> {
         // Initialize screen space GI system
+        let irradiance_volume = IrradianceVolume::new(device)?;
+        let screen_space_gi = ScreenSpaceGI::new(device)?;
+
         Ok(Self {
             light_probes: Vec::new(),
-            irradiance_volume: todo!(),
+            irradiance_volume,
             voxel_cone_tracing: None,
-            screen_space_gi: Some(todo!()),
+            screen_space_gi: Some(screen_space_gi),
             ray_traced_gi: None,
         })
     }
     
     pub fn new_ray_traced_gi(device: &wgpu::Device, queue: &wgpu::Queue) -> RobinResult<Self> {
         // Initialize ray traced GI system
+        let irradiance_volume = IrradianceVolume::new(device)?;
+        let ray_traced_gi = RayTracedGI::new(device)?;
+
         Ok(Self {
             light_probes: Vec::new(),
-            irradiance_volume: todo!(),
+            irradiance_volume,
             voxel_cone_tracing: None,
             screen_space_gi: None,
-            ray_traced_gi: Some(todo!()),
+            ray_traced_gi: Some(ray_traced_gi),
+        })
+    }
+}
+
+// Implementations for GI system components
+impl IrradianceVolume {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create dummy interpolation texture
+        let interpolation_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Irradiance Volume Texture"),
+            size: wgpu::Extent3d {
+                width: 64,
+                height: 64,
+                depth_or_array_layers: 64,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        Ok(Self {
+            bounds: BoundingBox::default(),
+            resolution: (64, 64, 64),
+            probe_grid: Vec::new(),
+            interpolation_texture,
+        })
+    }
+}
+
+impl VoxelConeTracing {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create voxel texture for cone tracing
+        let voxel_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Voxel Cone Tracing Texture"),
+            size: wgpu::Extent3d {
+                width: 512,
+                height: 512,
+                depth_or_array_layers: 512,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        // Create compute pipelines - use simplified shader for now
+        let voxel_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Voxel Cone Tracing Shader"),
+            source: wgpu::ShaderSource::Wgsl("
+                @compute @workgroup_size(8, 8, 8)
+                fn voxelize(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Voxelization stub
+                }
+
+                @compute @workgroup_size(8, 8)
+                fn cone_trace(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Cone tracing stub
+                }
+            ".into()),
+        });
+
+        let voxelization_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Voxelization Pipeline"),
+            layout: None,
+            module: &voxel_shader,
+            entry_point: "voxelize",
+            compilation_options: Default::default(),
+        });
+
+        let cone_tracing_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Cone Tracing Pipeline"),
+            layout: None,
+            module: &voxel_shader,
+            entry_point: "cone_trace",
+            compilation_options: Default::default(),
+        });
+
+        Ok(Self {
+            voxel_texture,
+            voxelization_pipeline,
+            cone_tracing_pipeline,
+            resolution: 512,
+        })
+    }
+}
+
+impl ScreenSpaceGI {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create screen space GI compute pipeline
+        let gi_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Screen Space GI Shader"),
+            source: wgpu::ShaderSource::Wgsl("
+                @compute @workgroup_size(8, 8)
+                fn compute_gi(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Screen space GI stub
+                }
+            ".into()),
+        });
+
+        let gi_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Screen Space GI Pipeline"),
+            layout: None,
+            module: &gi_shader,
+            entry_point: "compute_gi",
+            compilation_options: Default::default(),
+        });
+
+        // Create temporal accumulation and denoising (simplified)
+        let temporal_accumulation = TemporalAccumulation::new(device)?;
+        let denoising = Denoising::new(device)?;
+
+        Ok(Self {
+            gi_pipeline,
+            temporal_accumulation,
+            denoising,
+        })
+    }
+}
+
+impl RayTracedGI {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create ray tracing compute pipeline
+        let rt_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Ray Traced GI Shader"),
+            source: wgpu::ShaderSource::Wgsl("
+                @compute @workgroup_size(8, 8)
+                fn ray_trace_gi(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Ray traced GI stub
+                }
+            ".into()),
+        });
+
+        let rt_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Ray Traced GI Pipeline"),
+            layout: None,
+            module: &rt_shader,
+            entry_point: "ray_trace_gi",
+            compilation_options: Default::default(),
+        });
+
+        // Create acceleration structure (simplified)
+        let acceleration_structure = AccelerationStructure::new(device)?;
+
+        Ok(Self {
+            rt_pipeline,
+            acceleration_structure,
+            sample_count: 1,
+        })
+    }
+}
+
+impl TemporalAccumulation {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create dummy temporal accumulation
+
+        // Create dummy history texture
+        let history_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("History Texture"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
+            view_formats: &[],
+        });
+
+        // Create dummy accumulation pipeline
+        let accumulation_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Temporal Accumulation Shader"),
+            source: wgpu::ShaderSource::Wgsl("@compute @workgroup_size(1) fn main() {}".into()),
+        });
+
+        let accumulation_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Temporal Accumulation Pipeline"),
+            layout: None,
+            module: &accumulation_shader,
+            entry_point: "main",
+            compilation_options: Default::default(),
+        });
+
+        Ok(Self {
+            history_texture,
+            accumulation_pipeline,
+            blend_factor: 0.9,
+            accumulation_buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Temporal Accumulation Buffer"),
+                size: 1024,
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            }),
+            frame_count: 0,
+        })
+    }
+}
+
+impl Denoising {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create denoising compute pipelines
+        let denoise_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Denoising Shader"),
+            source: wgpu::ShaderSource::Wgsl("
+                @compute @workgroup_size(8, 8)
+                fn spatial_filter(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Spatial filtering stub
+                }
+
+                @compute @workgroup_size(8, 8)
+                fn temporal_filter(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Temporal filtering stub
+                }
+
+                @compute @workgroup_size(8, 8)
+                fn bilateral_filter(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    // Bilateral filtering stub
+                }
+            ".into()),
+        });
+
+        let spatial_filter = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Spatial Denoising Pipeline"),
+            layout: None,
+            module: &denoise_shader,
+            entry_point: "spatial_filter",
+            compilation_options: Default::default(),
+        });
+
+        let temporal_filter = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Temporal Denoising Pipeline"),
+            layout: None,
+            module: &denoise_shader,
+            entry_point: "temporal_filter",
+            compilation_options: Default::default(),
+        });
+
+        let bilateral_filter = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Bilateral Denoising Pipeline"),
+            layout: None,
+            module: &denoise_shader,
+            entry_point: "bilateral_filter",
+            compilation_options: Default::default(),
+        });
+
+        Ok(Self {
+            spatial_filter,
+            temporal_filter,
+            bilateral_filter,
+        })
+    }
+}
+
+impl AccelerationStructure {
+    pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
+        // Create dummy acceleration structure buffers
+        let geometry_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("BLAS Geometry Buffer"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let acceleration_structure_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("BLAS Acceleration Structure"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("TLAS Instance Buffer"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let tlas_acceleration_structure = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("TLAS Acceleration Structure"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        Ok(Self {
+            blas: vec![BottomLevelAS {
+                geometry_buffer,
+                acceleration_structure: acceleration_structure_buffer,
+            }],
+            tlas: TopLevelAS {
+                instance_buffer,
+                acceleration_structure: tlas_acceleration_structure,
+            },
         })
     }
 }

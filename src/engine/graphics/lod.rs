@@ -673,13 +673,48 @@ pub struct GPULODSelector {
 
 impl GPULODSelector {
     pub fn new(device: &wgpu::Device) -> RobinResult<Self> {
-        // This would create a compute shader for GPU-based LOD selection
-        // The shader would process all LOD groups in parallel
+        // Create compute shader for GPU-based LOD selection
+        let lod_compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("LOD Compute Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../gpu/shaders/lod_compute.wgsl").into()),
+        });
+
+        // Create compute pipeline
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("LOD Compute Pipeline"),
+            layout: None,
+            module: &lod_compute_shader,
+            entry_point: "compute_lod",
+            compilation_options: Default::default(),
+        });
+
+        // Create buffers for LOD data
+        let lod_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("LOD Data Buffer"),
+            size: std::mem::size_of::<[f32; 4]>() as u64 * 1024, // Space for 1024 LOD entries
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Camera Data Buffer"),
+            size: std::mem::size_of::<[f32; 16]>() as u64, // 4x4 matrix + position
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let selection_results = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("LOD Selection Results"),
+            size: std::mem::size_of::<u32>() as u64 * 1024, // Results for 1024 objects
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
         Ok(Self {
-            compute_pipeline: todo!(),
-            lod_buffer: todo!(),
-            camera_buffer: todo!(),
-            selection_results: todo!(),
+            compute_pipeline,
+            lod_buffer,
+            camera_buffer,
+            selection_results,
         })
     }
     

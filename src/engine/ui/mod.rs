@@ -8,14 +8,35 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 pub mod layout;
+pub mod legacy_components;
 pub mod components;
 pub mod events;
 pub mod styling;
+pub mod modern_components;
+pub mod tutorial_system;
+pub mod modern_architecture;
+pub mod design_system;
+pub mod theme_engine;
+pub mod css_in_rust;
+pub mod state_management;
+pub mod performance;
 
 pub use layout::*;
+pub use legacy_components::*;
 pub use components::*;
-pub use events::*;
-pub use styling::*;
+pub use events::{UIEvent, EventHandler, EventDispatcher, EventCallback};
+pub use styling::{Color as UIColor, Spacing, Border, StateStyle, UIStyle, Typography, TextDecoration, AlignItems, JustifyContent, FlexDirection, BoxSizing, Resize, TextAlign, BorderStyle};
+pub use modern_components::{AccessibilityProps, ModernButton, ModernCard, ModernNotification, NotificationType};
+pub use tutorial_system::*;
+pub use modern_architecture::*;
+pub use design_system::{DesignSystem, ColorPalette};
+pub use theme_engine::*;
+pub use css_in_rust::*;
+pub use state_management::*;
+pub use performance::{
+    PerformantUIRenderer, UIPerformanceConfig, UIPerformanceMetrics, VirtualScrollManager,
+    VirtualScrollConfig, UIComponent, RenderContext, UIPerformanceReport
+};
 
 /// Unique identifier for UI elements
 pub type ElementId = u32;
@@ -121,11 +142,18 @@ pub struct UIManager {
     next_id: ElementId,
     focused_element: Option<ElementId>,
     hovered_element: Option<ElementId>,
+    keyboard_focused_element: Option<ElementId>,
+    tab_order: Vec<ElementId>,
     animation_manager: AnimationManager,
     screen_size: Vec2,
     mouse_position: Vec2,
     mouse_pressed: bool,
     ui_scale: f32,
+    accessibility_enabled: bool,
+    high_contrast_mode: bool,
+    screen_reader_mode: bool,
+    notifications: Vec<ElementId>,
+    tutorial_system: TutorialSystem,
 }
 
 impl UIManager {
@@ -135,11 +163,18 @@ impl UIManager {
             next_id: 1,
             focused_element: None,
             hovered_element: None,
+            keyboard_focused_element: None,
+            tab_order: Vec::new(),
             animation_manager: AnimationManager::new(),
             screen_size: Vec2::new(screen_width, screen_height),
             mouse_position: Vec2::new(0.0, 0.0),
             mouse_pressed: false,
             ui_scale: 1.0,
+            accessibility_enabled: true,
+            high_contrast_mode: false,
+            screen_reader_mode: false,
+            notifications: Vec::new(),
+            tutorial_system: TutorialSystem::new(),
         }
     }
 
@@ -184,8 +219,17 @@ impl UIManager {
         self.mouse_position = Vec2::new(input.mouse_position().0 as f32, input.mouse_position().1 as f32);
         self.mouse_pressed = input.is_mouse_button_pressed(winit::event::MouseButton::Left);
 
+        // Handle keyboard navigation
+        self.handle_keyboard_navigation(input);
+
         // Update hover states
         self.update_hover_states();
+
+        // Update tutorial system
+        let tutorial_events = self.tutorial_system.update(delta_time, input);
+        for event in tutorial_events {
+            self.handle_tutorial_event(event);
+        }
 
         // Update all elements
         for (_, element) in self.elements.iter_mut() {
@@ -198,6 +242,11 @@ impl UIManager {
         // Handle mouse clicks
         if self.mouse_pressed {
             self.handle_mouse_click();
+        }
+
+        // Rebuild tab order if needed (could be optimized to only do this when elements change)
+        if self.tab_order.is_empty() && !self.elements.is_empty() {
+            self.rebuild_tab_order();
         }
     }
 
@@ -340,7 +389,7 @@ impl UIManager {
             // Create click event
             let event = UIEvent::Click {
                 element_id: hovered_id,
-                position: self.mouse_position,
+                position: (self.mouse_position.x, self.mouse_position.y),
             };
 
             // Send event to element
@@ -374,7 +423,294 @@ impl UIManager {
         self.elements.clear();
         self.focused_element = None;
         self.hovered_element = None;
+        self.keyboard_focused_element = None;
+        self.tab_order.clear();
+        self.notifications.clear();
         self.animation_manager = AnimationManager::new();
         log::info!("Cleared all UI elements");
+    }
+
+    // === ACCESSIBILITY FEATURES ===
+
+    /// Enable or disable accessibility features
+    pub fn set_accessibility_enabled(&mut self, enabled: bool) {
+        self.accessibility_enabled = enabled;
+        log::info!("Accessibility features {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Enable or disable high contrast mode
+    pub fn set_high_contrast_mode(&mut self, enabled: bool) {
+        self.high_contrast_mode = enabled;
+        log::info!("High contrast mode {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Enable or disable screen reader mode
+    pub fn set_screen_reader_mode(&mut self, enabled: bool) {
+        self.screen_reader_mode = enabled;
+        log::info!("Screen reader mode {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Get the currently keyboard-focused element
+    pub fn get_keyboard_focused_element(&self) -> Option<ElementId> {
+        self.keyboard_focused_element
+    }
+
+    /// Set keyboard focus to a specific element
+    pub fn set_keyboard_focus(&mut self, element_id: Option<ElementId>) {
+        // Clear focus from current element
+        if let Some(current_id) = self.keyboard_focused_element {
+            if let Some(element) = self.elements.get_mut(&current_id) {
+                element.set_state(UIState::Normal);
+            }
+        }
+
+        // Set focus to new element
+        self.keyboard_focused_element = element_id;
+        if let Some(new_id) = element_id {
+            if let Some(element) = self.elements.get_mut(&new_id) {
+                element.set_state(UIState::Focused);
+            }
+        }
+
+        log::debug!("Keyboard focus set to element: {:?}", element_id);
+    }
+
+    /// Navigate to the next focusable element (Tab key)
+    pub fn focus_next_element(&mut self) {
+        if self.tab_order.is_empty() {
+            return;
+        }
+
+        let current_index = if let Some(current_id) = self.keyboard_focused_element {
+            self.tab_order.iter().position(|&id| id == current_id).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let next_index = (current_index + 1) % self.tab_order.len();
+        let next_id = self.tab_order[next_index];
+        self.set_keyboard_focus(Some(next_id));
+    }
+
+    /// Navigate to the previous focusable element (Shift+Tab)
+    pub fn focus_previous_element(&mut self) {
+        if self.tab_order.is_empty() {
+            return;
+        }
+
+        let current_index = if let Some(current_id) = self.keyboard_focused_element {
+            self.tab_order.iter().position(|&id| id == current_id).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let prev_index = if current_index == 0 {
+            self.tab_order.len() - 1
+        } else {
+            current_index - 1
+        };
+        let prev_id = self.tab_order[prev_index];
+        self.set_keyboard_focus(Some(prev_id));
+    }
+
+    /// Rebuild the tab order based on current elements
+    pub fn rebuild_tab_order(&mut self) {
+        self.tab_order.clear();
+
+        // Collect all focusable elements and sort by tab index and position
+        let mut focusable_elements: Vec<(ElementId, i32, Vec2)> = Vec::new();
+
+        for (&id, element) in &self.elements {
+            if element.is_visible() {
+                // In a real implementation, you'd check if the element implements keyboard focus
+                // For now, we'll assume all visible elements are focusable
+                let position = element.get_bounds().position;
+                focusable_elements.push((id, 0, position)); // tab_index = 0 for all
+            }
+        }
+
+        // Sort by tab index, then by vertical position, then by horizontal position
+        focusable_elements.sort_by(|a, b| {
+            a.1.cmp(&b.1)  // tab_index
+                .then(a.2.y.partial_cmp(&b.2.y).unwrap_or(std::cmp::Ordering::Equal))  // y position
+                .then(a.2.x.partial_cmp(&b.2.x).unwrap_or(std::cmp::Ordering::Equal))  // x position
+        });
+
+        self.tab_order = focusable_elements.into_iter().map(|(id, _, _)| id).collect();
+        log::debug!("Rebuilt tab order with {} elements", self.tab_order.len());
+    }
+
+    /// Handle keyboard navigation
+    pub fn handle_keyboard_navigation(&mut self, input: &InputManager) {
+        if !self.accessibility_enabled {
+            return;
+        }
+
+        // Tab navigation
+        if input.is_named_key_just_pressed(winit::keyboard::NamedKey::Tab) {
+            if input.is_named_key_pressed(winit::keyboard::NamedKey::Shift) {
+                self.focus_previous_element();
+            } else {
+                self.focus_next_element();
+            }
+        }
+
+        // Escape key clears focus
+        if input.is_named_key_just_pressed(winit::keyboard::NamedKey::Escape) {
+            self.set_keyboard_focus(None);
+        }
+
+        // Enter or Space activates the focused element
+        if let Some(focused_id) = self.keyboard_focused_element {
+            if input.is_named_key_just_pressed(winit::keyboard::NamedKey::Enter) ||
+               input.is_named_key_just_pressed(winit::keyboard::NamedKey::Space) {
+                let event = UIEvent::Click {
+                    element_id: focused_id,
+                    position: (self.mouse_position.x, self.mouse_position.y),
+                };
+                if let Some(element) = self.elements.get_mut(&focused_id) {
+                    element.handle_event(&event);
+                }
+            }
+        }
+    }
+
+    // === NOTIFICATION SYSTEM ===
+
+    /// Add a notification to the UI
+    pub fn show_notification(&mut self, notification: ModernNotification) -> ElementId {
+        let id = self.add_element(Box::new(notification));
+        self.notifications.push(id);
+
+        // Position notification in the top-right corner
+        if let Some(element) = self.elements.get_mut(&id) {
+            let bounds = element.get_bounds_mut();
+            bounds.position.x = self.screen_size.x - bounds.size.x - 20.0;
+            bounds.position.y = 20.0 + (self.notifications.len() as f32 - 1.0) * (bounds.size.y + 10.0);
+        }
+
+        log::info!("Added notification with ID: {}", id);
+        id
+    }
+
+    /// Remove a notification
+    pub fn hide_notification(&mut self, id: ElementId) {
+        if let Some(pos) = self.notifications.iter().position(|&x| x == id) {
+            self.notifications.remove(pos);
+            self.remove_element(id);
+
+            // Reposition remaining notifications
+            for (index, &notification_id) in self.notifications.iter().enumerate() {
+                if let Some(element) = self.elements.get_mut(&notification_id) {
+                    let bounds = element.get_bounds_mut();
+                    bounds.position.y = 20.0 + index as f32 * (bounds.size.y + 10.0);
+                }
+            }
+        }
+    }
+
+    /// Show a success notification
+    pub fn show_success(&mut self, message: String) -> ElementId {
+        let notification = ModernNotification::success(message)
+            .with_auto_hide(4.0);
+        self.show_notification(notification)
+    }
+
+    /// Show a warning notification
+    pub fn show_warning(&mut self, message: String) -> ElementId {
+        let notification = ModernNotification::warning(message)
+            .with_auto_hide(6.0);
+        self.show_notification(notification)
+    }
+
+    /// Show an error notification
+    pub fn show_error(&mut self, message: String) -> ElementId {
+        let notification = ModernNotification::error(message)
+            .with_auto_hide(8.0);
+        self.show_notification(notification)
+    }
+
+    /// Show an info notification
+    pub fn show_info(&mut self, message: String) -> ElementId {
+        let notification = ModernNotification::info(message)
+            .with_auto_hide(5.0);
+        self.show_notification(notification)
+    }
+
+    // === TUTORIAL SYSTEM ===
+
+    /// Start the Engineer Build Mode tutorial
+    pub fn start_tutorial(&mut self) {
+        self.tutorial_system.init_engineer_build_mode_tutorial();
+        let events = self.tutorial_system.start();
+        for event in events {
+            self.handle_tutorial_event(event);
+        }
+        log::info!("Started Engineer Build Mode tutorial");
+    }
+
+    /// Stop the tutorial
+    pub fn stop_tutorial(&mut self) {
+        self.tutorial_system.stop();
+    }
+
+    /// Pause or resume the tutorial
+    pub fn toggle_tutorial_pause(&mut self) {
+        self.tutorial_system.toggle_pause();
+    }
+
+    /// Skip the current tutorial step
+    pub fn skip_tutorial_step(&mut self) {
+        let events = self.tutorial_system.skip_current_step();
+        for event in events {
+            self.handle_tutorial_event(event);
+        }
+    }
+
+    /// Check if tutorial is active
+    pub fn is_tutorial_active(&self) -> bool {
+        self.tutorial_system.is_active()
+    }
+
+    /// Get tutorial completion statistics
+    pub fn get_tutorial_stats(&self) -> TutorialStats {
+        self.tutorial_system.get_completion_stats()
+    }
+
+    /// Mark a tutorial action as completed (for integration with game systems)
+    pub fn complete_tutorial_action(&mut self, action: TutorialAction) {
+        let events = self.tutorial_system.mark_action_completed(&action);
+        for event in events {
+            self.handle_tutorial_event(event);
+        }
+    }
+
+    /// Show a tutorial hint
+    pub fn show_tutorial_hint(&mut self) {
+        if let Some(hint_event) = self.tutorial_system.get_hint_event() {
+            self.handle_tutorial_event(hint_event);
+        }
+    }
+
+    /// Handle tutorial events
+    fn handle_tutorial_event(&mut self, event: TutorialEvent) {
+        match event {
+            TutorialEvent::ShowInfo(message) => {
+                self.show_info(message);
+            }
+            TutorialEvent::ShowSuccess(message) => {
+                self.show_success(message);
+            }
+            TutorialEvent::ShowError(message) => {
+                self.show_error(message);
+            }
+            TutorialEvent::ShowHint(message) => {
+                self.show_info(message);
+            }
+            TutorialEvent::RefreshUI => {
+                // Refresh tutorial UI elements
+                log::debug!("Refreshing tutorial UI");
+            }
+        }
     }
 }
