@@ -2,8 +2,12 @@
 name = "robin"
 version = "0.1.0"
 edition = "2021"
-description = "A 2D/isometric game engine built for efficiency and ease-of-use"
+description = "A unified 2D/3D game engine optimized for macOS"
 license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "robin"
+path = "src/bin/robin.rs"
 
 [dependencies]
 winit = "0.29"
@@ -35,6 +39,15 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 sha2 = "0.10"
 which = "4.0"
 paste = "1.0"
+
+# macOS-specific Metal dependencies
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.28"
+cocoa = "0.26"
+objc = "0.2"
+core-foundation = "0.10"
+core-graphics = "0.24"
+dispatch = "0.2"
 # OpenGL for rendering
 gl = "0.14"
 # AI and machine learning dependencies (all self-contained, no external services)
@@ -43,6 +56,9 @@ smartcore = "0.3" # For ML algorithms
 candle-core = { version = "0.6", optional = true } # Optional neural network framework
 rayon = "1.8" # For parallel processing
 nalgebra = { version = "0.32", features = ["serde-serialize"] } # For 3D math operations
+
+# Physics engine dependencies
+rapier3d = "0.18"  # 3D physics engine for realistic physics simulation
 
 # Asset pipeline dependencies for production-ready parsing
 hound = "3.4"  # WAV audio file parsing
@@ -75,8 +91,16 @@ criterion = "0.5"
 tempfile = "3.0"
 
 [[bin]]
-name = "robin_voxel_demo"
-path = "robin_voxel_demo.rs"
+name = "phase4_ui_polish_demo"
+path = "phase4_ui_polish_demo.rs"
+
+[[bin]]
+name = "phase4_standalone_demo"
+path = "phase4_standalone_demo.rs"
+
+[[bin]]
+name = "simple_wgpu_demo"
+path = "simple_wgpu_demo.rs"
 
 [[example]]
 name = "hot_reload_demo"
