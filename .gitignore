@@ -1,1 +1,8 @@
 /target
+
+# Build artifacts
+/target/
+voxel_demo/target/
+*.rlib
+*.rmeta
+*.d
