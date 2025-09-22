@@ -1,4 +1,5 @@
-use crate::engine::math::{Vec3, Vec2, Mat4};
+use crate::engine::math::{Vec3, Mat4};
+// Removed unused import: Vec2
 
 pub struct Transform3D {
     pub position: Vec3,

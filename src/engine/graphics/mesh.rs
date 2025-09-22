@@ -7,12 +7,17 @@ use serde::{Deserialize, Serialize};
 
 /// Vertex data structure
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[repr(C)]
 pub struct Vertex {
     pub position: Vec3,
     pub normal: Vec3,
     pub uv: Vec2,
     pub color: [f32; 4],
 }
+
+// Safety: Vertex only contains f32 types which are Pod
+unsafe impl bytemuck::Pod for Vertex {}
+unsafe impl bytemuck::Zeroable for Vertex {}
 
 impl Vertex {
     pub fn new(position: Vec3, normal: Vec3, uv: Vec2, color: [f32; 4]) -> Self {

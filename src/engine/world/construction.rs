@@ -2,17 +2,19 @@ use nalgebra::{Vector3, Point3, Matrix4};
 use std::collections::HashMap;
 use super::building::BuildingSystem;
 
-pub mod voxel_engine;
-pub mod placement_system;
-pub mod terrain_modification;
-pub mod blueprint_system;
+// Temporarily disabled due to nalgebra math type issues:
+// pub mod voxel_engine;
+// pub mod placement_system;
+// pub mod terrain_modification;
+// pub mod blueprint_system;
 
-pub use voxel_engine::VoxelEngine;
-pub use placement_system::PlacementSystem;
-pub use terrain_modification::TerrainModifier;
-pub use blueprint_system::BlueprintSystem;
+// Temporarily disabled exports:
+// pub use voxel_engine::VoxelEngine;
+// pub use placement_system::PlacementSystem;
+// pub use terrain_modification::TerrainModifier;
+// pub use blueprint_system::BlueprintSystem;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MaterialType {
     Wood,
     Stone,
@@ -23,6 +25,374 @@ pub enum MaterialType {
     Water,
     Air,
     Custom(String),
+}
+
+// Simplified VoxelType enum for compatibility with robin_demo
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum VoxelType {
+    Air,
+    Stone,
+    Dirt,
+    Grass,
+    Sand,
+    Water,
+    Wood,
+    Leaves,
+    Crystal,
+    Lava,
+    // Enhanced Materials from robin_demo
+    Glass,
+    Metal,
+    Brick,
+    Ice,
+    Obsidian,
+}
+
+impl VoxelType {
+    pub fn get_color(&self) -> [f32; 3] {
+        match self {
+            VoxelType::Air => [0.0, 0.0, 0.0],
+            VoxelType::Stone => [0.6, 0.6, 0.6],
+            VoxelType::Dirt => [0.6, 0.4, 0.2],
+            VoxelType::Grass => [0.2, 0.8, 0.2],
+            VoxelType::Sand => [0.9, 0.8, 0.6],
+            VoxelType::Water => [0.2, 0.4, 0.8],
+            VoxelType::Wood => [0.6, 0.4, 0.2],
+            VoxelType::Leaves => [0.1, 0.6, 0.1],
+            VoxelType::Crystal => [0.7, 0.3, 0.9], // Purple
+            VoxelType::Lava => [1.0, 0.3, 0.1], // Orange-red
+            // Enhanced Materials
+            VoxelType::Glass => [0.8, 0.9, 1.0], // Light blue-white
+            VoxelType::Metal => [0.7, 0.7, 0.8], // Silver
+            VoxelType::Brick => [0.8, 0.4, 0.3], // Red-brown
+            VoxelType::Ice => [0.9, 0.95, 1.0], // Icy white
+            VoxelType::Obsidian => [0.1, 0.1, 0.15], // Dark volcanic glass
+        }
+    }
+
+    /// Get texture atlas coordinates for this voxel type
+    /// Returns (u_min, v_min, u_max, v_max) for a 4x4 texture atlas
+    pub fn get_texture_coords(&self) -> (f32, f32, f32, f32) {
+        const ATLAS_SIZE: f32 = 4.0; // 4x4 texture atlas
+        const CELL_SIZE: f32 = 1.0 / ATLAS_SIZE;
+
+        let (atlas_x, atlas_y) = match self {
+            VoxelType::Air => (0, 0),      // Transparent/empty
+            VoxelType::Stone => (1, 0),    // Stone texture
+            VoxelType::Dirt => (2, 0),     // Dirt texture
+            VoxelType::Grass => (3, 0),    // Grass texture
+            VoxelType::Sand => (0, 1),     // Sand texture
+            VoxelType::Water => (1, 1),    // Water texture
+            VoxelType::Wood => (2, 1),     // Wood texture
+            VoxelType::Leaves => (3, 1),   // Leaves texture
+            VoxelType::Crystal => (0, 2),  // Crystal texture
+            VoxelType::Lava => (1, 2),     // Lava texture
+            VoxelType::Glass => (2, 2),    // Glass texture
+            VoxelType::Metal => (3, 2),    // Metal texture
+            VoxelType::Brick => (0, 3),    // Brick texture
+            VoxelType::Ice => (1, 3),      // Ice texture
+            VoxelType::Obsidian => (2, 3), // Obsidian texture
+        };
+
+        let u_min = atlas_x as f32 * CELL_SIZE;
+        let v_min = atlas_y as f32 * CELL_SIZE;
+        let u_max = u_min + CELL_SIZE;
+        let v_max = v_min + CELL_SIZE;
+
+        (u_min, v_min, u_max, v_max)
+    }
+
+    /// Get texture coordinates for a specific face of the voxel
+    /// Returns UV coordinates for the four corners of a face
+    pub fn get_face_texture_coords(&self, _face_normal: [f32; 3]) -> [[f32; 2]; 4] {
+        let (u_min, v_min, u_max, v_max) = self.get_texture_coords();
+
+        // Return UV coordinates for quad: bottom-left, bottom-right, top-right, top-left
+        [
+            [u_min, v_max], // bottom-left
+            [u_max, v_max], // bottom-right
+            [u_max, v_min], // top-right
+            [u_min, v_min], // top-left
+        ]
+    }
+
+    pub fn to_material(&self) -> Material {
+        let (material_type, density, hardness, transparency, color, properties) = match self {
+            VoxelType::Air => (
+                MaterialType::Air,
+                0.0,
+                0.0,
+                1.0,
+                [0.0, 0.0, 0.0, 0.0],
+                MaterialProperties {
+                    gas: true,
+                    structural: false,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Stone => (
+                MaterialType::Stone,
+                2.7,
+                8.0,
+                0.0,
+                [0.6, 0.6, 0.6, 1.0],
+                MaterialProperties {
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Dirt => (
+                MaterialType::Earth,
+                1.5,
+                2.0,
+                0.0,
+                [0.6, 0.4, 0.2, 1.0],
+                MaterialProperties {
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Grass => (
+                MaterialType::Earth,
+                1.2,
+                1.0,
+                0.0,
+                [0.2, 0.8, 0.2, 1.0],
+                MaterialProperties {
+                    flammable: true,
+                    decorative: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Sand => (
+                MaterialType::Earth,
+                1.6,
+                1.0,
+                0.0,
+                [0.9, 0.8, 0.6, 1.0],
+                MaterialProperties {
+                    structural: false,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Water => (
+                MaterialType::Water,
+                1.0,
+                0.0,
+                0.8,
+                [0.2, 0.4, 0.8, 0.8],
+                MaterialProperties {
+                    liquid: true,
+                    structural: false,
+                    conductive: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Wood => (
+                MaterialType::Wood,
+                0.8,
+                3.0,
+                0.0,
+                [0.6, 0.4, 0.2, 1.0],
+                MaterialProperties {
+                    flammable: true,
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Leaves => (
+                MaterialType::Wood,
+                0.3,
+                0.5,
+                0.2,
+                [0.1, 0.6, 0.1, 1.0],
+                MaterialProperties {
+                    flammable: true,
+                    decorative: true,
+                    structural: false,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Crystal => (
+                MaterialType::Glass,
+                2.2,
+                7.0,
+                0.3,
+                [0.7, 0.3, 0.9, 1.0],
+                MaterialProperties {
+                    decorative: true,
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Lava => (
+                MaterialType::Custom("Lava".to_string()),
+                3.0,
+                0.1,
+                0.1,
+                [1.0, 0.3, 0.1, 1.0],
+                MaterialProperties {
+                    liquid: true,
+                    structural: false,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Glass => (
+                MaterialType::Glass,
+                2.5,
+                5.0,
+                0.9,
+                [0.8, 0.9, 1.0, 0.5],
+                MaterialProperties {
+                    structural: true,
+                    decorative: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Metal => (
+                MaterialType::Metal,
+                7.8,
+                9.0,
+                0.0,
+                [0.7, 0.7, 0.8, 1.0],
+                MaterialProperties {
+                    structural: true,
+                    conductive: true,
+                    magnetic: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Brick => (
+                MaterialType::Concrete,
+                2.0,
+                6.0,
+                0.0,
+                [0.8, 0.4, 0.3, 1.0],
+                MaterialProperties {
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Ice => (
+                MaterialType::Water,
+                0.9,
+                2.0,
+                0.7,
+                [0.9, 0.95, 1.0, 0.8],
+                MaterialProperties {
+                    structural: false,
+                    ..Default::default()
+                }
+            ),
+            VoxelType::Obsidian => (
+                MaterialType::Glass,
+                2.4,
+                7.5,
+                0.1,
+                [0.1, 0.1, 0.15, 1.0],
+                MaterialProperties {
+                    structural: true,
+                    ..Default::default()
+                }
+            ),
+        };
+
+        Material {
+            material_type,
+            density,
+            hardness,
+            transparency,
+            conductivity: if properties.conductive { 1.0 } else { 0.0 },
+            color,
+            texture_id: None,
+            properties,
+        }
+    }
+
+    /// Get PBR roughness value for this material (0.0 = mirror, 1.0 = completely rough)
+    pub fn get_roughness(&self) -> f32 {
+        match self {
+            VoxelType::Air => 1.0,          // Not visible, but rough
+            VoxelType::Stone => 0.8,        // Rough natural stone
+            VoxelType::Dirt => 0.9,         // Very rough earth
+            VoxelType::Grass => 0.85,       // Rough organic surface
+            VoxelType::Sand => 0.7,         // Moderately rough
+            VoxelType::Water => 0.0,        // Perfect mirror when still
+            VoxelType::Wood => 0.6,         // Moderately rough wood
+            VoxelType::Leaves => 0.9,       // Very rough organic
+            VoxelType::Crystal => 0.1,      // Very smooth crystal
+            VoxelType::Lava => 0.4,         // Somewhat smooth when molten
+            VoxelType::Glass => 0.05,       // Very smooth glass
+            VoxelType::Metal => 0.2,        // Polished metal
+            VoxelType::Brick => 0.7,        // Rough fired clay
+            VoxelType::Ice => 0.15,         // Smooth but not perfect
+            VoxelType::Obsidian => 0.1,     // Very smooth volcanic glass
+        }
+    }
+
+    /// Get PBR metallic value for this material (0.0 = dielectric, 1.0 = pure metal)
+    pub fn get_metallic(&self) -> f32 {
+        match self {
+            VoxelType::Air => 0.0,          // Not metallic
+            VoxelType::Stone => 0.0,        // Non-metallic rock
+            VoxelType::Dirt => 0.0,         // Non-metallic earth
+            VoxelType::Grass => 0.0,        // Organic, non-metallic
+            VoxelType::Sand => 0.0,         // Non-metallic silica
+            VoxelType::Water => 0.0,        // Non-metallic liquid
+            VoxelType::Wood => 0.0,         // Organic, non-metallic
+            VoxelType::Leaves => 0.0,       // Organic, non-metallic
+            VoxelType::Crystal => 0.0,      // Crystalline but not metallic
+            VoxelType::Lava => 0.0,         // Molten rock, not metallic
+            VoxelType::Glass => 0.0,        // Non-metallic transparent
+            VoxelType::Metal => 1.0,        // Pure metallic
+            VoxelType::Brick => 0.0,        // Fired clay, non-metallic
+            VoxelType::Ice => 0.0,          // Frozen water, non-metallic
+            VoxelType::Obsidian => 0.0,     // Volcanic glass, non-metallic
+        }
+    }
+
+    /// Returns true if this voxel type is affected by gravity and should fall
+    pub fn is_gravity_affected(&self) -> bool {
+        match self {
+            VoxelType::Sand => true,     // Sand falls
+            VoxelType::Dirt => true,     // Loose dirt can fall
+            VoxelType::Leaves => true,   // Leaves fall when not supported
+            VoxelType::Ice => true,      // Ice can fall when melting/unstable
+            _ => false,
+        }
+    }
+
+    /// Returns true if this voxel type can provide structural support to other blocks
+    pub fn is_structural_support(&self) -> bool {
+        match self {
+            VoxelType::Air => false,     // Air provides no support
+            VoxelType::Water => false,   // Water provides no support
+            VoxelType::Lava => false,    // Lava provides no support
+            _ => true,                   // All solid blocks provide support
+        }
+    }
+
+    /// Returns the density of this voxel type for physics calculations
+    pub fn density(&self) -> f32 {
+        match self {
+            VoxelType::Air => 0.0,
+            VoxelType::Stone => 2.7,
+            VoxelType::Dirt => 1.5,
+            VoxelType::Grass => 1.2,
+            VoxelType::Sand => 1.6,
+            VoxelType::Water => 1.0,
+            VoxelType::Wood => 0.6,
+            VoxelType::Leaves => 0.3,
+            VoxelType::Crystal => 2.2,
+            VoxelType::Lava => 3.0,
+            VoxelType::Glass => 2.5,
+            VoxelType::Metal => 7.8,
+            VoxelType::Brick => 2.0,
+            VoxelType::Ice => 0.9,
+            VoxelType::Obsidian => 2.4,
+        }
+    }
+
 }
 
 #[derive(Clone, Debug)]
@@ -152,6 +522,8 @@ pub enum StructuralNodeType {
     Slider,
 }
 
+// Temporarily disabled due to nalgebra math type issues:
+/*
 pub struct WorldConstructionSystem {
     pub voxel_engine: VoxelEngine,
     pub placement_system: PlacementSystem,
@@ -775,5 +1147,217 @@ impl WorldConstructionSystem {
         self.active_constructions.values()
             .map(|c| c.voxels.len())
             .sum()
+    }
+}
+*/ // End of temporarily disabled WorldConstructionSystem
+
+/// System for handling falling blocks physics
+#[derive(Debug, Clone)]
+pub struct FallingBlockSystem {
+    /// Blocks that are currently falling (position -> voxel_type)
+    pub falling_blocks: HashMap<(i32, i32, i32), VoxelType>,
+    /// Blocks that need to be checked for stability
+    pub blocks_to_check: Vec<(i32, i32, i32)>,
+    /// Physics handles for falling blocks
+    pub physics_handles: HashMap<(i32, i32, i32), crate::engine::physics3d::PhysicsHandle>,
+}
+
+impl Default for FallingBlockSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FallingBlockSystem {
+    pub fn new() -> Self {
+        Self {
+            falling_blocks: HashMap::new(),
+            blocks_to_check: Vec::new(),
+            physics_handles: HashMap::new(),
+        }
+    }
+
+    /// Check if a block at the given position should start falling
+    pub fn check_block_stability(&self, position: (i32, i32, i32), voxel_type: VoxelType, world_data: &HashMap<(i32, i32, i32), VoxelType>) -> bool {
+        // Only gravity-affected blocks can fall
+        if !voxel_type.is_gravity_affected() {
+            return false;
+        }
+
+        // Check if there's solid support below
+        let below_pos = (position.0, position.1 - 1, position.2);
+
+        match world_data.get(&below_pos) {
+            Some(below_voxel) => {
+                // Block is supported if there's a structural support block below
+                !below_voxel.is_structural_support()
+            }
+            None => {
+                // No block below, should fall
+                true
+            }
+        }
+    }
+
+    /// Add a block to the system to check for falling
+    pub fn schedule_block_check(&mut self, position: (i32, i32, i32)) {
+        if !self.blocks_to_check.contains(&position) {
+            self.blocks_to_check.push(position);
+        }
+    }
+
+    /// Make a block start falling by converting it to a dynamic physics body
+    pub fn start_block_falling(&mut self,
+        position: (i32, i32, i32),
+        voxel_type: VoxelType,
+        physics_world: &mut crate::engine::physics3d::PhysicsWorld3D
+    ) -> Result<(), crate::engine::error::RobinError> {
+        use crate::engine::physics3d::{BodyDescriptor, ColliderShape3D, BodyType3D};
+        use crate::engine::math::Vec3;
+
+        // Create a dynamic physics body for the falling block
+        let world_pos = Vec3::new(position.0 as f32, position.1 as f32, position.2 as f32);
+        let block_descriptor = BodyDescriptor {
+            body_type: BodyType3D::Dynamic,
+            position: world_pos,
+            mass: voxel_type.density(),
+            friction: 0.5,
+            restitution: 0.1, // Small bounce
+            linear_damping: 0.05,
+            angular_damping: 0.8,
+            gravity_scale: 1.0,
+            can_sleep: true,
+            lock_rotations: false,
+        };
+
+        let block_shape = ColliderShape3D::voxel_block();
+
+        let handle = physics_world.create_body(
+            block_descriptor,
+            block_shape,
+            Some(format!("falling_block_{}_{}_{}_{:?}", position.0, position.1, position.2, voxel_type)),
+        )?;
+
+        // Track the falling block
+        self.falling_blocks.insert(position, voxel_type);
+        self.physics_handles.insert(position, handle);
+
+        Ok(())
+    }
+
+    /// Update falling blocks and check if they've landed
+    pub fn update(&mut self,
+        physics_world: &mut crate::engine::physics3d::PhysicsWorld3D,
+        world_data: &mut HashMap<(i32, i32, i32), VoxelType>,
+        delta_time: f32
+    ) -> Result<(), crate::engine::error::RobinError> {
+        use crate::engine::math::Vec3;
+
+        // Check blocks that were scheduled for stability checks
+        let blocks_to_check = std::mem::take(&mut self.blocks_to_check);
+        for position in blocks_to_check {
+            if let Some(&voxel_type) = world_data.get(&position) {
+                if self.check_block_stability(position, voxel_type, world_data) {
+                    // Remove from world and start falling
+                    world_data.remove(&position);
+                    self.start_block_falling(position, voxel_type, physics_world)?;
+                }
+            }
+        }
+
+        // Update falling blocks
+        let mut blocks_to_land = Vec::new();
+
+        for (&original_pos, &voxel_type) in &self.falling_blocks {
+            if let Some(&handle) = self.physics_handles.get(&original_pos) {
+                // Check if the block has landed (low velocity and supported)
+                if let Some(current_pos) = physics_world.get_body_position(handle) {
+                    if let Some(velocity) = physics_world.get_body_velocity(handle) {
+                        // If the block is moving slowly and has solid ground below, it has landed
+                        if velocity.magnitude() < 0.1 {
+                            let landed_pos = (
+                                current_pos.x.round() as i32,
+                                current_pos.y.round() as i32,
+                                current_pos.z.round() as i32,
+                            );
+
+                            // Check if there's support below the landing position
+                            let below_pos = (landed_pos.0, landed_pos.1 - 1, landed_pos.2);
+                            if let Some(below_voxel) = world_data.get(&below_pos) {
+                                if below_voxel.is_structural_support() {
+                                    blocks_to_land.push((original_pos, landed_pos, voxel_type, handle));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Land the blocks that have stopped
+        for (original_pos, landed_pos, voxel_type, handle) in blocks_to_land {
+            // Remove from physics world
+            physics_world.remove_body(handle)?;
+
+            // Place block in new position in world
+            world_data.insert(landed_pos, voxel_type);
+
+            // Remove from falling tracking
+            self.falling_blocks.remove(&original_pos);
+            self.physics_handles.remove(&original_pos);
+
+            // Check if this landing destabilizes nearby blocks
+            self.check_nearby_blocks_for_stability(landed_pos);
+        }
+
+        Ok(())
+    }
+
+    /// Check blocks around a position for stability (used when a block lands)
+    fn check_nearby_blocks_for_stability(&mut self, position: (i32, i32, i32)) {
+        // Check blocks above the landed block
+        for y_offset in 1..=3 {
+            let check_pos = (position.0, position.1 + y_offset, position.2);
+            self.schedule_block_check(check_pos);
+        }
+
+        // Check adjacent blocks that might have been affected
+        for x_offset in -1..=1 {
+            for z_offset in -1..=1 {
+                if x_offset == 0 && z_offset == 0 { continue; }
+                let check_pos = (position.0 + x_offset, position.1 + 1, position.2 + z_offset);
+                self.schedule_block_check(check_pos);
+            }
+        }
+    }
+
+    /// Trigger falling block checks for an area (used when blocks are removed)
+    pub fn trigger_area_check(&mut self, center: (i32, i32, i32), radius: i32) {
+        for x in (center.0 - radius)..=(center.0 + radius) {
+            for y in (center.1 - radius)..=(center.1 + radius + 3) { // Check above too
+                for z in (center.2 - radius)..=(center.2 + radius) {
+                    self.schedule_block_check((x, y, z));
+                }
+            }
+        }
+    }
+
+    /// Get the number of currently falling blocks
+    pub fn falling_count(&self) -> usize {
+        self.falling_blocks.len()
+    }
+
+    /// Clear all falling blocks (useful for cleanup)
+    pub fn clear(&mut self, physics_world: &mut crate::engine::physics3d::PhysicsWorld3D) -> Result<(), crate::engine::error::RobinError> {
+        // Remove all physics bodies
+        for handle in self.physics_handles.values() {
+            physics_world.remove_body(*handle)?;
+        }
+
+        self.falling_blocks.clear();
+        self.physics_handles.clear();
+        self.blocks_to_check.clear();
+
+        Ok(())
     }
 }

@@ -1,8 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
-use cgmath::{Matrix4, Vector3, Vector4, Point3, perspective, Deg, ortho};
-use wgpu::util::DeviceExt;
+use std::collections::HashMap;
+use cgmath::{Matrix4, Vector3, Point3, ortho};
 use crate::engine::error::RobinResult;
-use crate::engine::graphics::{Camera3D, Light3D, BoundingBox};
+use crate::engine::graphics::{Camera3D, BoundingBox};
+// Removed unused imports: sync::Arc, Vector4, perspective, Deg, wgpu::util::DeviceExt, Light3D
 
 pub struct LightingSystem {
     device: wgpu::Device,

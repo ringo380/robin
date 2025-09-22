@@ -1,6 +1,7 @@
 use super::{AssetConfig, AssetError, AssetResult, HotReloadEvent, AssetType, utils};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
+    // Removed unused import: HashSet
     path::{Path, PathBuf},
     sync::{Arc, Mutex, mpsc},
     thread,

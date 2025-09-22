@@ -10,7 +10,8 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, Transaction, params, OptionalExtension, Result as SqliteResult};
 use uuid::Uuid;
-use log::{info, warn, error, debug};
+use log::{info, warn, debug};
+// Removed unused import: error
 use tokio;
 // Using standard library types for compatibility
 

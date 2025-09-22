@@ -90,7 +90,7 @@ pub async fn run_magical_demo() {
             let explosion_x = 100.0 + (explosion_count as f32 * 100.0);
             let explosion_y = 400.0;
             
-            let explosion_id = game_builder.create_explosion(explosion_x, explosion_y);
+            let _explosion_id = game_builder.create_explosion(explosion_x, explosion_y);
             log::info!("💥 Explosion {} created at ({}, {})", explosion_count + 1, explosion_x, explosion_y);
             
             // Create some fireworks too
@@ -103,7 +103,7 @@ pub async fn run_magical_demo() {
             ];
             
             let firework_color = colors[explosion_count % colors.len()];
-            let firework_id = game_builder.create_fireworks(explosion_x, explosion_y + 50.0, firework_color);
+            let _firework_id = game_builder.create_fireworks(explosion_x, explosion_y + 50.0, firework_color);
             log::info!("🎆 Fireworks created with color {:?}", firework_color);
             
             last_explosion = current_time;

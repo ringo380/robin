@@ -447,10 +447,10 @@ impl SophisticatedContentGenerator {
         let narratives = self.narrative_engine.generate_world_narratives(&history, &characters, &cultures).await?;
         
         // Phase 7: Compose atmospheric music
-        let music = self.music_composer.compose_world_music(&gen_params, &cultures, &narratives).await?;
+        let _music = self.music_composer.compose_world_music(&gen_params, &cultures, &narratives).await?;
         
         // Phase 8: Design visual aesthetics
-        let visual_style = self.visual_artist.create_world_aesthetic(&gen_params).await?;
+        let _visual_style = self.visual_artist.create_world_aesthetic(&gen_params).await?;
         
         // Phase 9: Generate gameplay systems (create placeholder world first)
         let placeholder_world = GeneratedWorld { 
@@ -469,7 +469,7 @@ impl SophisticatedContentGenerator {
                 parameters_used: "placeholder".to_string(),
             }
         };
-        let gameplay_systems = self.gameplay_designer.design_world_gameplay(&placeholder_world, &narratives, &gen_params).await?;
+        let _gameplay_systems = self.gameplay_designer.design_world_gameplay(&placeholder_world, &narratives, &gen_params).await?;
         
         // Phase 10: Ensure coherence across all elements
         let coherence_analysis = self.content_coherence.analyze_world_coherence(&placeholder_world).await?;
@@ -569,13 +569,13 @@ impl SophisticatedContentGenerator {
         let backstory = self.character_creator.create_backstory(&personality, &character_parameters).await?;
         
         // Phase 4: Map relationships with other characters
-        let relationships = self.character_creator.map_relationships(&personality, &backstory, &character_parameters).await?;
+        let _relationships = self.character_creator.map_relationships(&personality, &backstory, &character_parameters).await?;
         
         // Phase 5: Distribute skills and abilities
         let skills = self.character_creator.distribute_skills(&personality, &backstory, &character_parameters).await?;
         
         // Phase 6: Set up character evolution potential
-        let evolution_potential = self.character_creator.define_evolution_potential(
+        let _evolution_potential = self.character_creator.define_evolution_potential(
             &personality, &backstory, &skills, &character_parameters
         ).await?;
         
@@ -609,13 +609,13 @@ impl SophisticatedContentGenerator {
                 parameters_used: "temp".to_string(),
             },
         };
-        let social_dynamics = self.character_creator.simulate_social_dynamics(&characters, &temp_world).await?;
+        let _social_dynamics = self.character_creator.simulate_social_dynamics(&characters, &temp_world).await?;
         
         // Phase 8: Generate character-specific music themes
-        let character_theme = self.music_composer.compose_character_theme(&personality, &backstory).await?;
+        let _character_theme = self.music_composer.compose_character_theme(&personality, &backstory).await?;
         
         // Phase 9: Create character visual design
-        let visual_design = self.visual_artist.design_character_visuals(&appearance, &personality).await?;
+        let _visual_design = self.visual_artist.design_character_visuals(&appearance, &personality).await?;
         
         let generation_time = generation_start.elapsed();
         self.performance_stats.record_character_generation(generation_time);

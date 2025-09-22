@@ -57,7 +57,7 @@ impl MLFramework {
     }
 
     /// Train models with advanced optimization
-    pub async fn train_models(&mut self, training_data: TrainingData) -> RobinResult<TrainingResult> {
+    pub async fn train_models(&mut self, _training_data: TrainingData) -> RobinResult<TrainingResult> {
         self.performance_metrics.start_training_timer();
 
         // 1. Optimize training configuration - TODO: Create proper TrainingSpecification
@@ -78,7 +78,7 @@ impl MLFramework {
         training_result.models = optimized_models;
         
         // 6. Validate model quality
-        let validation_result = self.validate_model_quality(&training_result)?;
+        let _validation_result = self.validate_model_quality(&training_result)?;
         training_result.validation_results = vec![ValidationResult::default()]; // TODO: Convert ValidationResults to Vec<ValidationResult>
 
         self.performance_metrics.end_training_timer();

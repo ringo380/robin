@@ -8,8 +8,7 @@
 /// - Query performance monitoring
 
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -17,17 +16,13 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use ahash::AHashMap;
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult, Transaction};
+use rusqlite::{params, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use uuid::Uuid;
 
 use super::{AssetError, AssetMetadata, AssetResult, AssetType};
 

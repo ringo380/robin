@@ -463,7 +463,7 @@ impl ComprehensiveMonitoringSystem {
         current_metrics: Arc<RwLock<Option<PerformanceMetrics>>>,
         running: Arc<AtomicBool>,
         alert_sender: Sender<PerformanceAlert>,
-        baseline_metrics: Arc<RwLock<HashMap<String, f64>>>,
+        _baseline_metrics: Arc<RwLock<HashMap<String, f64>>>,
     ) {
         let mut interval = interval(Duration::from_millis(config.collection_interval_ms));
 
@@ -488,7 +488,7 @@ impl ComprehensiveMonitoringSystem {
     }
 
     /// Collect comprehensive performance metrics
-    async fn collect_performance_metrics(config: &MonitoringConfig) -> PerformanceMetrics {
+    async fn collect_performance_metrics(_config: &MonitoringConfig) -> PerformanceMetrics {
         let timestamp = SystemTime::now();
 
         // In a real implementation, these would collect actual metrics from the engine subsystems

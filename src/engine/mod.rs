@@ -7,6 +7,7 @@ pub mod assets;
 pub mod scene;
 pub mod animation;
 pub mod physics;
+pub mod physics3d;
 pub mod ui;
 pub mod game_builder;
 pub mod error;
@@ -32,7 +33,9 @@ pub mod story;
 pub mod tools;
 pub mod vehicle;
 pub mod world;
+pub mod build_mode; // Re-enabled to check compilation errors
 
 pub use core::Engine;
 pub use game_builder::GameBuilder;
 pub use physics::{PhysicsWorld, RigidBody, Collider, ColliderShape};
+pub use physics3d::{PhysicsWorld3D, PhysicsHandle, BodyType3D, ColliderShape3D, BodyDescriptor, CollisionEvent3D, Physics3DConfig};

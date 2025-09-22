@@ -411,7 +411,7 @@ impl BackgroundProcessor {
         if let Some(ref worker_pool) = self.worker_pool {
             let mut receiver = worker_pool.result_receiver.lock().await;
             
-            while let Ok(mut execution) = receiver.try_recv() {
+            while let Ok(execution) = receiver.try_recv() {
                 let task_id = execution.task.id.clone();
                 
                 // Update statistics

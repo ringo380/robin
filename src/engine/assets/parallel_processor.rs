@@ -8,7 +8,6 @@
 /// - Smart memory management
 
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, AtomicBool, Ordering},
@@ -17,11 +16,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ahash::AHashMap;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use lru::LruCache;
 use memmap2::Mmap;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::Mutex;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 use serde::{Deserialize, Serialize};

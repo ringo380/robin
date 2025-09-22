@@ -1,16 +1,19 @@
 use super::{
-    AssetConfig, AssetRegistry, AssetWatcher, AssetError, AssetResult, 
-    HotReloadEvent, LoadRequest, LoadPriority, ReloadCallback, AssetType,
+    AssetConfig, AssetRegistry, AssetWatcher, AssetError, AssetResult,
+    HotReloadEvent, LoadRequest, LoadPriority, ReloadCallback,
     utils
 };
+// Removed unused import: AssetType
 use crate::engine::{
-    graphics::{Texture, TextureManager},
+    graphics::TextureManager,
     audio::AudioManager,
 };
+// Removed unused import: Texture
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
+    // Removed unused import: Instant
     thread,
 };
 

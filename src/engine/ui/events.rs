@@ -1,7 +1,4 @@
-use crate::engine::{
-    math::Vec2,
-    ui::ElementId,
-};
+use crate::engine::ui::ElementId;
 
 /// UI events that can be triggered by user interactions
 #[derive(Debug, Clone)]

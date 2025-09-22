@@ -7,8 +7,12 @@ pub struct InputManager {
     keys_just_pressed: HashMap<Key, bool>,
     keys_just_released: HashMap<Key, bool>,
     mouse_buttons: HashMap<MouseButton, bool>,
+    mouse_buttons_just_pressed: HashMap<MouseButton, bool>,
+    mouse_buttons_just_released: HashMap<MouseButton, bool>,
     mouse_position: (f64, f64),
     mouse_delta: (f64, f64),
+    scroll_delta: f32,
+    viewport_size: (f64, f64),
 }
 
 impl InputManager {
@@ -18,8 +22,12 @@ impl InputManager {
             keys_just_pressed: HashMap::new(),
             keys_just_released: HashMap::new(),
             mouse_buttons: HashMap::new(),
+            mouse_buttons_just_pressed: HashMap::new(),
+            mouse_buttons_just_released: HashMap::new(),
             mouse_position: (0.0, 0.0),
             mouse_delta: (0.0, 0.0),
+            scroll_delta: 0.0,
+            viewport_size: (1920.0, 1080.0),
         }
     }
 
@@ -39,6 +47,15 @@ impl InputManager {
 
     pub fn update_mouse_button(&mut self, button: MouseButton, state: ElementState) {
         let pressed = state == ElementState::Pressed;
+        let was_pressed = self.mouse_buttons.get(&button).copied().unwrap_or(false);
+
+        // Track just pressed/released states
+        if pressed && !was_pressed {
+            self.mouse_buttons_just_pressed.insert(button, true);
+        } else if !pressed && was_pressed {
+            self.mouse_buttons_just_released.insert(button, true);
+        }
+
         self.mouse_buttons.insert(button, pressed);
     }
 
@@ -87,5 +104,32 @@ impl InputManager {
         self.mouse_delta = (0.0, 0.0);
         self.keys_just_pressed.clear();
         self.keys_just_released.clear();
+        self.mouse_buttons_just_pressed.clear();
+        self.mouse_buttons_just_released.clear();
+        self.scroll_delta = 0.0;
+    }
+
+    pub fn is_mouse_button_just_pressed(&self, button: MouseButton) -> bool {
+        self.mouse_buttons_just_pressed.get(&button).copied().unwrap_or(false)
+    }
+
+    pub fn is_mouse_button_just_released(&self, button: MouseButton) -> bool {
+        self.mouse_buttons_just_released.get(&button).copied().unwrap_or(false)
+    }
+
+    pub fn scroll_delta(&self) -> f32 {
+        self.scroll_delta
+    }
+
+    pub fn update_scroll(&mut self, delta: f32) {
+        self.scroll_delta += delta;
+    }
+
+    pub fn viewport_size(&self) -> (f64, f64) {
+        self.viewport_size
+    }
+
+    pub fn update_viewport_size(&mut self, size: (f64, f64)) {
+        self.viewport_size = size;
     }
 }

@@ -1,6 +1,5 @@
 use crate::engine::math::Vec2;
 use std::collections::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
 use cgmath::InnerSpace;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

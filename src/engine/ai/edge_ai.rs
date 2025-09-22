@@ -518,17 +518,17 @@ impl MobileInferenceOptimizer {
         Ok(())
     }
 
-    async fn run_inference(&self, model: &QuantizedModel, input: &[f32]) -> RobinResult<Vec<f32>> {
+    async fn run_inference(&self, _model: &QuantizedModel, _input: &[f32]) -> RobinResult<Vec<f32>> {
         // Simulate optimized mobile inference
         Ok(vec![0.8, 0.15, 0.05]) // Placeholder result
     }
 
-    async fn run_adaptive_inference(&self, model: &QuantizedModel, input: &[f32], quality_target: f32) -> RobinResult<Vec<f32>> {
+    async fn run_adaptive_inference(&self, _model: &QuantizedModel, _input: &[f32], _quality_target: f32) -> RobinResult<Vec<f32>> {
         // Implement adaptive inference based on quality target
         Ok(vec![0.82, 0.13, 0.05])
     }
 
-    async fn run_throttled_inference(&self, model: &QuantizedModel, input: &[f32]) -> RobinResult<Vec<f32>> {
+    async fn run_throttled_inference(&self, _model: &QuantizedModel, _input: &[f32]) -> RobinResult<Vec<f32>> {
         // Run minimal processing inference
         Ok(vec![0.75, 0.20, 0.05])
     }
@@ -631,7 +631,7 @@ impl QuantizedModelCache {
         Ok(())
     }
 
-    async fn load_models_for_device(&mut self, device_info: &DeviceInfo, quantization: QuantizationLevel) -> RobinResult<()> {
+    async fn load_models_for_device(&mut self, _device_info: &DeviceInfo, _quantization: QuantizationLevel) -> RobinResult<()> {
         // Load appropriate models for device
         Ok(())
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 use cgmath::{Matrix4, Vector3, Vector4, Point3, perspective, Deg, InnerSpace, SquareMatrix, Matrix};
 use crate::engine::error::RobinResult;
-use crate::engine::graphics::{Vertex, Mesh, Camera};
+// Removed unused imports: Vertex, Mesh, Camera (this file defines its own Vertex3D, Mesh3D, Camera3D)
 // use crate::engine::performance::PerformanceManager; // Temporarily disabled
 
 #[repr(C)]
@@ -451,7 +451,7 @@ impl<'a> Renderer3D<'a> {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/forward.wgsl").into()),
         });
         
-        let shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let _shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shadow Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shadow.wgsl").into()),
         });

@@ -1,9 +1,8 @@
 use crate::engine::{
     math::Vec2,
-    ui::{UIBounds, UIState, events::UIEvent, UIElement, ElementId, EventHandler, styling::{StateStyle, Color, UIStyle}},
+    ui::{UIBounds, UIState, events::UIEvent, UIElement, ElementId, styling::{StateStyle, Color, UIStyle}},
     input::InputManager,
 };
-use std::collections::HashMap;
 
 /// Button component with click handling
 pub struct Button {

@@ -8,7 +8,7 @@
 /// - Smart change detection with content hashing
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -18,19 +18,17 @@ use std::{
 };
 
 use ahash::AHashMap;
-use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use dashmap::DashMap;
 use lru::LruCache;
 use notify::{
-    Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-    event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind},
+    Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use tokio::time::{interval, sleep};
 
-use super::{AssetError, AssetMetadata, AssetResult, AssetType, HotReloadEvent};
+use super::{AssetError, AssetResult, AssetType, HotReloadEvent};
 
 /// Configuration for optimized hot reload system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -543,14 +541,14 @@ impl OptimizedHotReloadSystem {
 
     /// Main worker loop for processing file system events
     async fn worker_loop(
-        worker_id: usize,
+        _worker_id: usize,
         receiver: Receiver<notify::Event>,
         debounce_states: Arc<DashMap<PathBuf, DebounceState>>,
         dependency_graph: Arc<RwLock<DependencyGraph>>,
         metrics: Arc<HotReloadMetrics>,
         running: Arc<AtomicBool>,
         config: OptimizedHotReloadConfig,
-        callback: Option<Arc<dyn Fn(HotReloadEvent) + Send + Sync>>,
+        _callback: Option<Arc<dyn Fn(HotReloadEvent) + Send + Sync>>,
     ) {
         let mut batch: Vec<notify::Event> = Vec::with_capacity(config.max_batch_size);
         let mut last_batch_time = Instant::now();

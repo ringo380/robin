@@ -238,7 +238,7 @@ impl AISystem {
 
     /// Train reinforcement learning agents for adaptive gameplay
     pub async fn train_rl_agents(&mut self, agent_configs: Vec<RLAgentConfig>) -> RobinResult<RLTrainingResults> {
-        let mut results: Vec<RLAgentResult> = Vec::new();
+        let _results: Vec<RLAgentResult> = Vec::new();
         let agents_count = agent_configs.len();
         
         for config in agent_configs {

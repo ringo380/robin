@@ -302,7 +302,7 @@ impl ReinforcementLearningSystem {
     }
 
     /// Load trained models
-    pub async fn load_models(&mut self, load_path: &str) -> RobinResult<()> {
+    pub async fn load_models(&mut self, _load_path: &str) -> RobinResult<()> {
         // Implementation for loading saved models
         // This would deserialize and restore agent states
         Ok(())
@@ -371,7 +371,7 @@ impl QLearningAgent {
         Ok(())
     }
 
-    async fn save_model(&self, path: &str) -> RobinResult<()> {
+    async fn save_model(&self, _path: &str) -> RobinResult<()> {
         // Serialize and save Q-table
         Ok(())
     }

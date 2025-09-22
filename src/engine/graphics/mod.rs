@@ -10,6 +10,7 @@ pub mod color;
 pub mod mesh;
 pub mod lighting;
 pub mod lod;
+pub mod backends;
 
 pub use renderer::{Renderer, Light, SpriteInstance};
 pub use renderer_3d::{Renderer3D, Camera3D, Material, Light as Light3D, Vertex3D, Mesh3D, BoundingBox};
@@ -22,6 +23,7 @@ pub use color::Color;
 pub use mesh::{Mesh, Vertex};
 pub use lighting::{LightingSystem, ShadowRenderer, GlobalIlluminationSystem};
 pub use lod::{LODManager, LODGroup, MeshSimplifier};
+pub use backends::{RenderBackend, UnifiedRenderer, PlatformWindowHandle, PlatformCapabilities, detect_best_backend};
 
 /// Graphics context for AI and rendering systems
 #[derive(Debug)]

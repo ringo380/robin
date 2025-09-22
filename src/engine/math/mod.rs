@@ -1,13 +1,11 @@
-pub mod vector;
-pub mod matrix;
 pub mod transform;
 pub mod bounds;
+// Removed non-existent modules: vector, matrix
 
 pub use cgmath::*;
-pub use vector::*;
-pub use matrix::*;
 pub use transform::*;
 pub use bounds::*;
+// Removed unused imports: vector::*, matrix::*
 
 pub type Vec2 = cgmath::Vector2<f32>;
 pub type Vec3 = cgmath::Vector3<f32>;

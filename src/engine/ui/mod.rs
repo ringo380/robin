@@ -1,7 +1,6 @@
 use crate::engine::{
     math::Vec2,
-    graphics::{Light, Sprite},
-    animation::{AnimationManager, Animation, AnimationTarget, EaseType},
+    animation::{AnimationManager, AnimationTarget, EaseType},
     input::InputManager,
 };
 use std::collections::HashMap;

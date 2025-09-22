@@ -1,9 +1,9 @@
 use std::collections::{HashMap, BTreeMap};
-use cgmath::{Vector3, Point3, InnerSpace, EuclideanSpace};
+use cgmath::{InnerSpace, EuclideanSpace};
+// Removed unused imports: Point3, Vector3
 use crate::engine::error::RobinResult;
 use crate::engine::graphics::{Camera3D, Mesh3D, BoundingBox};
-use std::time::{Instant, Duration};
-use std::sync::{Arc, RwLock};
+// Removed unused imports: Duration, Arc, RwLock, std::time::Instant
 use rayon::prelude::*;
 
 pub struct LODManager {
@@ -567,7 +567,7 @@ impl MeshSimplifier {
     pub fn simplify_mesh(&self, mesh: &Mesh3D, target_reduction: f32) -> RobinResult<Mesh3D> {
         // This would implement actual mesh simplification algorithms
         // For now, return a placeholder that creates a new mesh with the same data
-        use crate::engine::graphics::Renderer3D;
+        // Removed unused import: crate::engine::graphics::Renderer3D
         
         // This is a placeholder - a real implementation would reduce vertices/faces
         let simplified_vertices = mesh.vertices.clone();
