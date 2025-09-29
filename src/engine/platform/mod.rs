@@ -6,7 +6,7 @@
  */
 
 use crate::engine::{
-    error::{RobinError, RobinResult},
+    error::RobinResult,
     graphics::GraphicsContext,
 };
 use std::collections::HashMap;
@@ -18,6 +18,7 @@ pub mod mobile;
 pub mod desktop;
 pub mod web;
 pub mod packaging;
+pub mod cloud_saves;
 
 use build::*;
 use deployment::*;
@@ -134,6 +135,12 @@ impl PlatformConfig {
                 feature_flags.insert("webgl".to_string(), true);
                 feature_flags.insert("webgpu".to_string(), false);
             }
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms inherit from their base platforms
+                feature_flags.insert("directx".to_string(), true);
+                feature_flags.insert("vulkan".to_string(), true);
+                feature_flags.insert("opengl".to_string(), true);
+            }
         }
 
         Self {
@@ -158,6 +165,9 @@ pub enum Platform {
     iOS,
     Android,
     Web,
+    Steam,
+    Epic,
+    GOG,
 }
 
 impl Platform {
@@ -192,6 +202,7 @@ impl Platform {
             Platform::iOS => ".ipa",
             Platform::Android => ".apk",
             Platform::Web => ".wasm",
+            Platform::Steam | Platform::Epic | Platform::GOG => ".exe", // Distribution platforms use Windows exe
         }
     }
 
@@ -203,6 +214,7 @@ impl Platform {
             Platform::iOS => ".framework",
             Platform::Android => ".so",
             Platform::Web => ".wasm",
+            Platform::Steam | Platform::Epic | Platform::GOG => ".dll", // Distribution platforms use Windows dll
         }
     }
 
@@ -240,6 +252,9 @@ impl std::fmt::Display for Platform {
             Platform::iOS => "ios",
             Platform::Android => "android",
             Platform::Web => "web",
+            Platform::Steam => "steam",
+            Platform::Epic => "epic",
+            Platform::GOG => "gog",
         };
         write!(f, "{}", s)
     }
@@ -314,6 +329,13 @@ impl PlatformCapabilities {
             Platform::Web => {
                 apis.push(GraphicsAPI::WebGL);
                 apis.push(GraphicsAPI::WebGPU);
+            }
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms inherit Windows graphics APIs
+                apis.push(GraphicsAPI::DirectX11);
+                apis.push(GraphicsAPI::DirectX12);
+                apis.push(GraphicsAPI::Vulkan);
+                apis.push(GraphicsAPI::OpenGL);
             }
         }
         

@@ -1,9 +1,6 @@
 use crate::engine::{
-    scene::{Scene, SerializableScene, SceneSerializer},
+    scene::SerializableScene,
     error::{RobinError, RobinResult},
-    physics::PhysicsWorld,
-    ui::UIManager,
-    animation::AnimationManager,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -17,10 +14,12 @@ use std::{
 pub mod game_state;
 pub mod save_manager;
 pub mod profile;
+pub mod world_serialization;
 
 pub use game_state::*;
 pub use save_manager::*;
 pub use profile::*;
+pub use world_serialization::*;
 
 /// Save system configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

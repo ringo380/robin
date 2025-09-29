@@ -8,7 +8,7 @@
 use crate::engine::{
     error::{RobinError, RobinResult},
     graphics::GraphicsContext,
-    platform::{Platform, PlatformCapabilities},
+    platform::Platform,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -94,6 +94,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSFileSystem::new()?)),
             Platform::Android => Ok(Box::new(AndroidFileSystem::new()?)),
             Platform::Web => Ok(Box::new(WebFileSystem::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows file system
+                Ok(Box::new(WindowsFileSystem::new()?))
+            }
         }
     }
 
@@ -105,6 +109,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSWindowManager::new()?)),
             Platform::Android => Ok(Box::new(AndroidWindowManager::new()?)),
             Platform::Web => Ok(Box::new(WebWindowManager::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows window manager
+                Ok(Box::new(WindowsWindowManager::new()?))
+            }
         }
     }
 
@@ -116,6 +124,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSInputManager::new()?)),
             Platform::Android => Ok(Box::new(AndroidInputManager::new()?)),
             Platform::Web => Ok(Box::new(WebInputManager::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows input manager
+                Ok(Box::new(WindowsInputManager::new()?))
+            }
         }
     }
 
@@ -127,6 +139,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSSystemServices::new()?)),
             Platform::Android => Ok(Box::new(AndroidSystemServices::new()?)),
             Platform::Web => Ok(Box::new(WebSystemServices::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows system services
+                Ok(Box::new(WindowsSystemServices::new()?))
+            }
         }
     }
 
@@ -138,6 +154,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSAudioSystem::new()?)),
             Platform::Android => Ok(Box::new(AndroidAudioSystem::new()?)),
             Platform::Web => Ok(Box::new(WebAudioSystem::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows audio system
+                Ok(Box::new(WindowsAudioSystem::new()?))
+            }
         }
     }
 
@@ -149,6 +169,10 @@ impl PlatformAbstraction {
             Platform::iOS => Ok(Box::new(IOSNetworkManager::new()?)),
             Platform::Android => Ok(Box::new(AndroidNetworkManager::new()?)),
             Platform::Web => Ok(Box::new(WebNetworkManager::new()?)),
+            Platform::Steam | Platform::Epic | Platform::GOG => {
+                // Distribution platforms use Windows network manager
+                Ok(Box::new(WindowsNetworkManager::new()?))
+            }
         }
     }
 }
@@ -807,7 +831,7 @@ macro_rules! impl_platform_abstraction {
                         os_name: std::env::consts::OS.to_string(),
                         os_version: "Unknown".to_string(),
                         architecture: std::env::consts::ARCH.to_string(),
-                        hostname: whoami::hostname(),
+                        hostname: whoami::fallible::hostname().unwrap_or_else(|_| "Unknown".to_string()),
                         username: whoami::username(),
                     }
                 }

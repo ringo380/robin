@@ -505,6 +505,7 @@ impl Default for HotReloadSystemBuilder {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]

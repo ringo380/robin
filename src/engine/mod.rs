@@ -10,6 +10,7 @@ pub mod physics;
 pub mod physics3d;
 pub mod ui;
 pub mod game_builder;
+pub mod gameplay;
 pub mod error;
 pub mod logging;
 pub mod diagnostics;
@@ -34,6 +35,9 @@ pub mod tools;
 pub mod vehicle;
 pub mod world;
 pub mod build_mode; // Re-enabled to check compilation errors
+pub mod community;
+pub mod collaboration;
+pub mod networking;
 
 pub use core::Engine;
 pub use game_builder::GameBuilder;

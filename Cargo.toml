@@ -9,6 +9,14 @@ license = "MIT OR Apache-2.0"
 name = "robin"
 path = "src/bin/robin.rs"
 
+[[bin]]
+name = "minimal_test"
+path = "minimal_test.rs"
+
+[[bin]]
+name = "working_interactive_demo"
+path = "working_interactive_demo.rs"
+
 [dependencies]
 winit = "0.29"
 wgpu = "0.20"
@@ -39,6 +47,8 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 sha2 = "0.10"
 which = "4.0"
 paste = "1.0"
+thiserror = "1.0"
+cpal = "0.15"
 
 # macOS-specific Metal dependencies
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -85,6 +95,13 @@ ahash = "0.8"  # Fast hasher for hash maps
 smallvec = "1.11"  # Stack-allocated vectors
 bumpalo = "3.14"  # Bump allocator for temporary allocations
 notify = "6.0"  # File watching for hot reload
+
+# Optional UI dependencies
+imgui = { version = "0.12", optional = true }
+
+[features]
+default = []
+imgui-support = ["imgui"]
 
 [dev-dependencies]
 criterion = "0.5"
@@ -145,6 +162,10 @@ path = "voxel_world_demo.rs"
 [[example]]
 name = "robin_voxel_demo"
 path = "robin_voxel_demo.rs"
+
+[[example]]
+name = "minimal_triangle"
+path = "examples/minimal_triangle.rs"
 
 [[bench]]
 name = "engine_benchmarks"

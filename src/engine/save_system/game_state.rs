@@ -1,9 +1,9 @@
 use super::*;
 use crate::engine::{
-    scene::{Scene, GameObject},
+    scene::Scene,
     physics::PhysicsWorld,
     // ui::UIManager,  // TODO: UIManager not implemented yet
-    // animation::AnimationManager,  // TODO: AnimationManager not implemented yet 
+    // animation::AnimationManager,  // TODO: AnimationManager not implemented yet
     // audio::AudioManager,  // TODO: AudioManager not implemented yet
     graphics::ParticleSystem,
 };

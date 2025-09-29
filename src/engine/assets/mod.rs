@@ -22,9 +22,10 @@ pub mod optimized_hot_reload;
 pub use hot_reload::*;
 pub use registry::*;
 pub use watcher::*;
-pub use pipeline::*;
-pub use importer::*;
-pub use database::*;
+// Use selective imports to avoid conflicts
+pub use pipeline::{AssetPipeline, PipelineConfig, OptimizationLevel};
+pub use importer::{AssetImporter, ImportResult};
+pub use database::{AssetDatabase, AssetMetadata as DatabaseAssetMetadata, DatabaseConfig, DatabasePerformanceMetrics};
 pub use hot_reload_optimized::{
     OptimizedHotReloadSystem, HotReloadConfig, HotReloadMetrics, HotReloadPerformanceReport
 };
