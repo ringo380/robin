@@ -25,16 +25,29 @@ pub mod content_creation;
 pub mod components;
 pub mod testing;
 pub mod editor;
+pub mod enhanced_templates;
 
-pub use tools::*;
-pub use logic::*;
-pub use interactive_elements::*;
-pub use element_placement_tool::*;
-pub use mode_system::*;
-pub use content_creation::*;
-pub use components::*;
-pub use testing::*;
-pub use editor::*;
+// Build Mode tools and systems - explicit exports to avoid conflicts
+pub use tools::{BuildTool, ToolKit};
+pub use logic::{LogicSystem, LogicNode, LogicNodeType, LogicValue, VisualLogicSystem};
+pub use logic::ActionType as LogicActionType;
+pub use interactive_elements::{InteractiveElement, InteractiveElementsSystem};
+pub use interactive_elements::TriggerType as InteractionTriggerType;
+pub use element_placement_tool::{ElementPlacementTool, PlacementSettings};
+pub use mode_system::{ModeSystem, ModeSettings, PerformanceStats, OptimizationSuggestion, PerformanceProfile};
+pub use mode_system::{PerformanceMonitor as BuildPerformanceMonitor, DebugOverlay as BuildDebugOverlay};
+pub use content_creation::{ContentCreationSystem, ContentType, ContentTemplate, QualityMetrics};
+pub use content_creation::ActionType as CreationActionType;
+pub use components::{ComponentLibrary, InteractiveComponent};
+pub use components::TriggerType as ComponentTriggerType;
+pub use testing::{TestingSystem, TestScenario};
+pub use testing::{PerformanceMonitor as TestPerformanceMonitor, DebugOverlay as TestDebugOverlay};
+pub use editor::{Editor, EditorTool, EditorPreferences};
+pub use enhanced_templates::{
+    EnhancedTemplateLibrary, EnhancedTemplate, TemplateCategory, TemplateComplexity,
+    TemplateStructure, BuildRequirements, TemplateVariation, InteractiveTemplateElement,
+    TemplateAnimation, TemplateOptimization, SearchCriteria
+};
 
 /// Enhanced build modes for voxel construction
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -79,6 +92,8 @@ pub struct VoxelBuildSystem {
     grid_snap: bool,
     undo_stack: VecDeque<VoxelBuildAction>,
     redo_stack: VecDeque<VoxelBuildAction>,
+    // Enhanced template support for compatibility
+    current_enhanced_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +131,7 @@ impl VoxelBuildSystem {
             grid_snap: true,
             undo_stack: VecDeque::new(),
             redo_stack: VecDeque::new(),
+            current_enhanced_template: None,
         }
     }
 
@@ -227,6 +243,26 @@ impl VoxelBuildSystem {
             BuildMode::Paste => BuildMode::Single,
         };
     }
+
+    /// Get current enhanced template ID
+    pub fn get_current_enhanced_template(&self) -> Option<&String> {
+        self.current_enhanced_template.as_ref()
+    }
+
+    /// Set current enhanced template
+    pub fn set_enhanced_template(&mut self, template_id: Option<String>) {
+        self.current_enhanced_template = template_id;
+        if let Some(ref id) = self.current_enhanced_template {
+            log::debug!("Selected enhanced template: {}", id);
+        } else {
+            log::debug!("Cleared enhanced template selection");
+        }
+    }
+
+    /// Check if using enhanced template mode
+    pub fn is_using_enhanced_template(&self) -> bool {
+        self.current_enhanced_template.is_some()
+    }
 }
 
 /// The main Engineer Build Mode system
@@ -263,6 +299,9 @@ pub struct EngineerBuildMode {
 
     /// Content creation system for projects, templates, and wizards
     content_creation_system: ContentCreationSystem,
+
+    /// Enhanced template library for sophisticated content creation
+    enhanced_template_library: EnhancedTemplateLibrary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -289,6 +328,7 @@ impl EngineerBuildMode {
             element_placement_tool: ElementPlacementTool::new(),
             logic_system: VisualLogicSystem::new(),
             content_creation_system: ContentCreationSystem::new(),
+            enhanced_template_library: EnhancedTemplateLibrary::new(),
         }
     }
 
@@ -579,6 +619,74 @@ impl EngineerBuildMode {
     /// Get current project quality metrics
     pub fn get_project_quality_metrics(&self) -> Option<QualityMetrics> {
         self.content_creation_system.get_quality_metrics()
+    }
+
+    /// Get the enhanced template library
+    pub fn get_enhanced_template_library(&self) -> &EnhancedTemplateLibrary {
+        &self.enhanced_template_library
+    }
+
+    /// Get mutable access to the enhanced template library
+    pub fn get_enhanced_template_library_mut(&mut self) -> &mut EnhancedTemplateLibrary {
+        &mut self.enhanced_template_library
+    }
+
+    /// Search enhanced templates by criteria
+    pub fn search_enhanced_templates(&self, criteria: &SearchCriteria) -> Vec<&EnhancedTemplate> {
+        self.enhanced_template_library.search_templates(criteria)
+    }
+
+    /// Get enhanced template by ID
+    pub fn get_enhanced_template(&self, template_id: &str) -> Option<&EnhancedTemplate> {
+        self.enhanced_template_library.get_template(template_id)
+    }
+
+    /// Get enhanced templates by category
+    pub fn get_enhanced_templates_by_category(&self, category: TemplateCategory) -> Vec<&EnhancedTemplate> {
+        self.enhanced_template_library.get_templates_by_category(category)
+    }
+
+    /// Get featured enhanced templates
+    pub fn get_featured_enhanced_templates(&self) -> Vec<&EnhancedTemplate> {
+        self.enhanced_template_library.get_featured_templates()
+    }
+
+    /// Apply enhanced template at position
+    pub fn apply_enhanced_template(&mut self, template_id: &str, position: Vec3, variation_id: Option<&str>) -> RobinResult<()> {
+        if let Some(template) = self.enhanced_template_library.get_template(template_id) {
+            // Create build action for applying template
+            let action = BuildAction::CreateObject {
+                object_id: rand::random(),
+                object_type: format!("enhanced_template_{}", template_id),
+                position,
+            };
+
+            self.add_history_action(action);
+
+            // TODO: Implement actual template application with voxel placement
+            log::info!("Applied enhanced template '{}' at position {:?}", template.name, position);
+
+            if let Some(var_id) = variation_id {
+                log::info!("Using template variation: {}", var_id);
+            }
+
+            Ok(())
+        } else {
+            Err(crate::engine::error::RobinError::ResourceNotFound {
+                resource_type: "EnhancedTemplate".to_string(),
+                resource_id: template_id.to_string(),
+            })
+        }
+    }
+
+    /// Get template compilation status
+    pub fn get_template_compilation_status(&self, template_id: &str) -> Option<bool> {
+        self.enhanced_template_library.is_template_compiled(template_id)
+    }
+
+    /// Compile template for optimized use
+    pub fn compile_enhanced_template(&mut self, template_id: &str) -> RobinResult<()> {
+        self.enhanced_template_library.compile_template(template_id)
     }
 }
 

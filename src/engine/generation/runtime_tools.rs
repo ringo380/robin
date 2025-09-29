@@ -6,15 +6,13 @@
  */
 
 use crate::engine::{
-    graphics::{Texture, Color},
-    math::{Vec2, Vec3, Transform},
+    graphics::Color,
+    math::Vec3,
     error::{RobinError, RobinResult},
 };
 use super::{
-    GenerationEngine, GenerationConfig, GenerationStyle, DetailLevel,
+    GenerationEngine, DetailLevel,
     CharacterParams, EnvironmentParams, ObjectParams,
-    VoxelSystem, PixelScatterSystem,
-    DestructionSystem, UIGenerator,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -1170,14 +1168,17 @@ mod tests {
         let mut tools = RuntimeTools::new();
         
         let params = GenerationParams::Character(CharacterParams {
-            archetype: super::super::templates::CharacterArchetype::Hero,
-            scale: Vec3::new(1.0, 1.0, 1.0),
-            color_scheme: vec![],
             style: GenerationStyle::Voxel,
             detail_level: DetailLevel::Medium,
-            equipment: vec![],
-            animations: vec![],
-            special_abilities: vec![],
+            character_type: "Hero".to_string(),
+            customization: HashMap::new(),
+            generate_animations: true,
+            scale: 1.0,
+            primary_color: "#8B4513".to_string(),
+            has_hair: true,
+            hair_color: "#654321".to_string(),
+            clothing: vec![],
+            color_scheme: vec![],
         });
         
         let editor_handle = tools.open_parameter_editor(GenerationType::Character, params);
@@ -1199,14 +1200,17 @@ mod tests {
         let tools = RuntimeTools::new();
         
         let base_params = CharacterParams {
-            archetype: super::super::templates::CharacterArchetype::Hero,
-            scale: Vec3::new(1.0, 1.0, 1.0),
-            color_scheme: vec![("primary".to_string(), Color::new(0.8, 0.6, 0.4, 1.0))],
             style: GenerationStyle::Voxel,
             detail_level: DetailLevel::Medium,
-            equipment: vec![],
-            animations: vec![],
-            special_abilities: vec![],
+            character_type: "Hero".to_string(),
+            customization: HashMap::new(),
+            generate_animations: true,
+            scale: 1.0,
+            primary_color: "#8B4513".to_string(),
+            has_hair: true,
+            hair_color: "#654321".to_string(),
+            clothing: vec![],
+            color_scheme: vec![("primary".to_string(), Color::new(0.8, 0.6, 0.4, 1.0))],
         };
         
         let variations = tools.generate_character_variations(&base_params, 5);

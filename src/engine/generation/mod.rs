@@ -9,9 +9,8 @@
 use crate::engine::{
     graphics::{Color},
     math::{Vec2, Vec3},
-    error::{RobinError, RobinResult},
+    error::RobinResult,
 };
-use std::sync::Arc;
 use crate::engine::generation::noise::TerrainParams;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -6,13 +6,12 @@
  */
 
 use crate::engine::{
-    graphics::{Texture, Color},
-    math::{Vec2, Vec3, Transform},
+    graphics::Color,
+    math::{Vec2, Vec3},
     error::{RobinError, RobinResult},
 };
 use super::{
     VoxelType, GenerationStyle, DetailLevel,
-    DestructibleEnvironment,
     destruction::DestructionParams,
 };
 use serde::{Deserialize, Serialize};

@@ -6,8 +6,8 @@
  */
 
 use crate::engine::{
-    graphics::{Texture, Color},
-    math::{Vec2, Vec3},
+    graphics::Color,
+    math::Vec3,
     error::{RobinError, RobinResult},
 };
 // Types defined in this file - no need to import

@@ -6,8 +6,8 @@
  */
 
 use crate::engine::{
-    graphics::{Texture, Color, ParticleSystem},
-    math::{Vec2, Vec3, Transform},
+    graphics::Color,
+    math::Vec3,
     error::{RobinError, RobinResult},
     audio::AudioSystem,
 };
@@ -36,7 +36,7 @@ impl From<VoxelPos> for Vec3 {
         Vec3::new(vp.x as f32, vp.y as f32, vp.z as f32)
     }
 }
-use super::{VoxelSystem, VoxelType, VoxelWorld, PixelScatterSystem};
+use super::{VoxelType, VoxelWorld};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Instant;

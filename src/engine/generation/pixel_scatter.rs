@@ -7,9 +7,9 @@
  */
 
 use crate::engine::{
-    graphics::{Color, Texture, ParticleSystem},
+    graphics::{Color, Texture},
     math::{Vec2, Vec3},
-    error::{RobinError, RobinResult},
+    error::RobinResult,
 };
 use cgmath::InnerSpace;
 use serde::{Deserialize, Serialize};
