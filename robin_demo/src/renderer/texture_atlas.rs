@@ -1,7 +1,7 @@
 // Texture atlas system for block materials
 // Manages a 256x256 texture atlas with 16x16 tiles (256 total tiles)
 
-use crate::game::VoxelType;
+use robin::engine::generation::voxel_system::VoxelType;
 
 /// Size of the texture atlas (power of 2 for better GPU performance)
 pub const ATLAS_SIZE: u32 = 256;
@@ -53,38 +53,49 @@ impl TextureAtlas {
         let mut tile_mapping = [TileUV::new(0, 0); 16];
 
         // Map voxel types to specific tile positions
-        // Using a 4x4 grid for the main materials in the top-left corner
-        tile_mapping[VoxelType::Air as usize] = TileUV::new(0, 0);      // Air (transparent, not rendered)
-        tile_mapping[VoxelType::Stone as usize] = TileUV::new(1, 0);    // Stone - gray
-        tile_mapping[VoxelType::Dirt as usize] = TileUV::new(2, 0);     // Dirt - brown
-        tile_mapping[VoxelType::Grass as usize] = TileUV::new(3, 0);    // Grass - green
+        // Using available VoxelType variants from Robin engine
+        tile_mapping[Self::voxel_to_index(VoxelType::Air)] = TileUV::new(0, 0);      // Air (transparent, not rendered)
+        tile_mapping[Self::voxel_to_index(VoxelType::Stone)] = TileUV::new(1, 0);    // Stone - gray
+        tile_mapping[Self::voxel_to_index(VoxelType::Solid)] = TileUV::new(2, 0);    // Solid (dirt/grass/sand) - brown
+        tile_mapping[Self::voxel_to_index(VoxelType::Liquid)] = TileUV::new(1, 1);   // Liquid (water/lava) - blue
 
-        tile_mapping[VoxelType::Sand as usize] = TileUV::new(0, 1);     // Sand - tan
-        tile_mapping[VoxelType::Water as usize] = TileUV::new(1, 1);    // Water - blue
-        tile_mapping[VoxelType::Wood as usize] = TileUV::new(2, 1);     // Wood - brown
-        tile_mapping[VoxelType::Leaves as usize] = TileUV::new(3, 1);   // Leaves - green
-
-        tile_mapping[VoxelType::Crystal as usize] = TileUV::new(0, 2);  // Crystal - magenta (emissive)
-        tile_mapping[VoxelType::Lava as usize] = TileUV::new(1, 2);     // Lava - red (emissive)
-
-        // Enhanced Materials (second row)
-        tile_mapping[VoxelType::Glass as usize] = TileUV::new(2, 2);    // Glass - transparent blue
-        tile_mapping[VoxelType::Metal as usize] = TileUV::new(3, 2);    // Metal - metallic gray
-        tile_mapping[VoxelType::Brick as usize] = TileUV::new(0, 3);    // Brick - red-brown
-        tile_mapping[VoxelType::Ice as usize] = TileUV::new(1, 3);      // Ice - icy white
-        tile_mapping[VoxelType::Obsidian as usize] = TileUV::new(2, 3); // Obsidian - dark volcanic
+        tile_mapping[Self::voxel_to_index(VoxelType::Wood)] = TileUV::new(2, 1);     // Wood - brown
+        tile_mapping[Self::voxel_to_index(VoxelType::Glass)] = TileUV::new(2, 2);    // Glass - transparent blue
+        tile_mapping[Self::voxel_to_index(VoxelType::Metal)] = TileUV::new(3, 2);    // Metal - metallic gray
+        tile_mapping[Self::voxel_to_index(VoxelType::Brick)] = TileUV::new(0, 3);    // Brick - red-brown
+        tile_mapping[Self::voxel_to_index(VoxelType::Concrete)] = TileUV::new(1, 3); // Concrete - gray
+        tile_mapping[Self::voxel_to_index(VoxelType::Gas)] = TileUV::new(3, 1);      // Gas - light gray
+        tile_mapping[Self::voxel_to_index(VoxelType::Light)] = TileUV::new(0, 2);    // Light - yellow (emissive)
 
         Self { tile_mapping }
     }
 
+    /// Convert VoxelType to array index (since VoxelType can't be cast to usize)
+    fn voxel_to_index(voxel_type: VoxelType) -> usize {
+        match voxel_type {
+            VoxelType::Air => 0,
+            VoxelType::Solid => 1,
+            VoxelType::Liquid => 2,
+            VoxelType::Gas => 3,
+            VoxelType::Light => 4,
+            VoxelType::Stone => 5,
+            VoxelType::Wood => 6,
+            VoxelType::Metal => 7,
+            VoxelType::Glass => 8,
+            VoxelType::Concrete => 9,
+            VoxelType::Brick => 10,
+            VoxelType::Custom(_) => 11, // Custom materials use a default texture
+        }
+    }
+
     /// Get UV coordinates for a specific voxel type
     pub fn get_uv(&self, voxel_type: VoxelType) -> TileUV {
-        let index = voxel_type as usize;
+        let index = Self::voxel_to_index(voxel_type);
         if index < self.tile_mapping.len() {
             self.tile_mapping[index]
         } else {
             // Default to stone texture for unknown types
-            self.tile_mapping[VoxelType::Stone as usize]
+            self.tile_mapping[Self::voxel_to_index(VoxelType::Stone)]
         }
     }
 

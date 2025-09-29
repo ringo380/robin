@@ -183,6 +183,7 @@ mod metal_impl {
             // Set drawable size
             let drawable_size = CGSize::new(window_size.0 as f64, window_size.1 as f64);
             unsafe {
+                #[allow(unexpected_cfgs)]
                 let _: () = msg_send![layer.as_ptr(), setDrawableSize: drawable_size];
             }
 
@@ -340,6 +341,7 @@ mod metal_impl {
         pub fn resize(&mut self, new_size: (f32, f32)) {
             self.drawable_size = CGSize::new(new_size.0 as f64, new_size.1 as f64);
             unsafe {
+                #[allow(unexpected_cfgs)]
                 let _: () = msg_send![self.layer.as_ptr(), setDrawableSize: self.drawable_size];
             }
         }

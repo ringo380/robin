@@ -8,9 +8,17 @@ use imgui::{DrawCmd, DrawData, DrawList, DrawVert};
 use objc::{msg_send, sel, sel_impl};
 
 use crate::window::NativeWindow;
+use crate::culling::{HierarchicalCuller, ChunkId, CameraFrustum, AABB};
+use crate::lod_system::{LodSystem, LodConfig, LodLevel, LodStatistics};
+use crate::material_batching::{MaterialBatcher, MaterialType, BatchingStats};
+use crate::performance_monitor::{PerformanceMonitor as BatchingPerformanceMonitor, PerformanceMetrics, BatchPerformanceStats, MonitorConfig};
+use crate::dynamic_texture_atlas::{DynamicTextureAtlas, AtlasStats, AtlasUV};
+use crate::pbr_lighting::{PBRLightingSystem, PBRMaterial, Light, GPULight, EnvironmentLighting, ToneMappingMode};
+use crate::chunk_streaming::{ChunkStreamingSystem, StreamingConfig, simple_terrain_generator};
 use super::mesh::Mesh;
 use super::shaders::COMBINED_SHADER_SOURCE;
 use super::{Uniforms, Camera};
+use super::error_handling::{MetalError, MetalResult, ErrorRecovery, PerformanceMonitor};
 
 pub struct MetalRenderer {
     device: Device,
@@ -38,13 +46,44 @@ pub struct MetalRenderer {
     ui_index_buffer: Option<Buffer>,
     ui_uniform_buffer: Option<Buffer>,
     font_sampler: Option<SamplerState>,
+    // Performance monitoring and error recovery
+    performance_monitor: PerformanceMonitor,
+    last_frame_time: std::time::Instant,
+    // Hierarchical frustum culling
+    hierarchical_culler: HierarchicalCuller,
+    visible_chunks: Vec<ChunkId>,
+    // Level of Detail system
+    lod_system: LodSystem,
+    chunk_positions: std::collections::HashMap<ChunkId, cgmath::Vector3<f32>>,
+    // Material batching system
+    material_batcher: MaterialBatcher,
+    // Batching performance monitoring
+    batching_performance_monitor: BatchingPerformanceMonitor,
+    // Dynamic texture atlas system
+    dynamic_texture_atlas: DynamicTextureAtlas,
+    // PBR lighting system
+    pbr_lighting_system: PBRLightingSystem,
+    light_buffer: Buffer,
+    material_buffer: Buffer,
+    // Chunk streaming system
+    chunk_streaming_system: ChunkStreamingSystem,
 }
 
 impl MetalRenderer {
     pub fn new(window: &NativeWindow) -> Result<Self, Box<dyn std::error::Error>> {
-        // Create Metal device (automatic selection of best GPU)
-        let device = Device::system_default().ok_or("No Metal device found")?;
-        println!("🚀 Using Metal device: {}", device.name());
+        // Create Metal device with proper error handling
+        let device = ErrorRecovery::retry_with_backoff(
+            || Device::system_default().ok_or(MetalError::DeviceNotFound),
+            3,
+            "Metal device creation"
+        ).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+        log::info!("🚀 Using Metal device: {}", device.name());
+
+        // Validate device capabilities
+        if !device.supports_family(MTLGPUFamily::Mac2) {
+            log::warn!("⚠️  Metal device may have limited capabilities");
+        }
 
         // Create command queue
         let command_queue = device.new_command_queue();
@@ -101,6 +140,72 @@ impl MetalRenderer {
             let _: () = msg_send![layer.as_ptr(), setDrawableSize: drawable_size];
         }
 
+        // Initialize hierarchical frustum culler with world bounds
+        let world_bounds = AABB::new(
+            cgmath::Point3::new(-1024.0, -256.0, -1024.0),
+            cgmath::Point3::new(1024.0, 256.0, 1024.0)
+        );
+        let hierarchical_culler = HierarchicalCuller::new(world_bounds, 32.0, 6);
+
+        // Initialize LOD system with default configuration
+        let lod_config = LodConfig::default();
+        let lod_system = LodSystem::new(lod_config);
+
+        // Initialize material batching system
+        let material_batcher = MaterialBatcher::new();
+
+        // Initialize batching performance monitor
+        let batching_performance_monitor = BatchingPerformanceMonitor::new(MonitorConfig::default());
+
+        // Initialize dynamic texture atlas system (1024x1024 atlases)
+        let mut dynamic_texture_atlas = DynamicTextureAtlas::new(1024);
+        dynamic_texture_atlas.preload_materials()?;
+        dynamic_texture_atlas.create_metal_textures(&device)?;
+
+        // Initialize PBR lighting system
+        let pbr_lighting_system = PBRLightingSystem::new();
+
+        // Create GPU buffers for lighting data
+        let max_lights = 32;
+        let light_buffer = device.new_buffer(
+            (std::mem::size_of::<GPULight>() * max_lights) as u64,
+            MTLResourceOptions::StorageModeShared
+        );
+
+        let max_materials = 16;
+        let material_buffer = device.new_buffer(
+            (std::mem::size_of::<PBRMaterial>() * max_materials) as u64,
+            MTLResourceOptions::StorageModeShared
+        );
+
+        // Initialize chunk streaming system
+        let streaming_config = StreamingConfig {
+            chunk_size: 32,
+            render_distance: 12,
+            full_detail_distance: 96.0,
+            half_detail_distance: 192.0,
+            quarter_detail_distance: 384.0,
+            max_loaded_chunks: 500,
+            max_memory_mb: 256.0,
+            background_thread_count: 2,
+            load_queue_size: 30,
+            unload_queue_size: 15,
+            priority_update_interval: std::time::Duration::from_millis(200),
+            memory_cleanup_interval: std::time::Duration::from_secs(10),
+        };
+
+        let generation_fn = Box::new(simple_terrain_generator);
+        let render_distance = streaming_config.render_distance;
+        let chunk_streaming_system = ChunkStreamingSystem::new(streaming_config, generation_fn);
+
+        log::info!("🔧 Hierarchical frustum culler initialized");
+        log::info!("📊 LOD system initialized with default configuration");
+        log::info!("🎨 Material batching system initialized");
+        log::info!("📈 Batching performance monitor initialized");
+        log::info!("🖼️  Dynamic texture atlas system initialized");
+        log::info!("💡 PBR lighting system initialized with {} materials", pbr_lighting_system.material_library.get_all_materials().len());
+        log::info!("🌍 Chunk streaming system initialized with {} render distance", render_distance);
+
         Ok(Self {
             device,
             command_queue,
@@ -124,6 +229,19 @@ impl MetalRenderer {
             ui_index_buffer: None,
             ui_uniform_buffer: None,
             font_sampler: None,
+            performance_monitor: PerformanceMonitor::new(),
+            last_frame_time: std::time::Instant::now(),
+            hierarchical_culler,
+            visible_chunks: Vec::new(),
+            lod_system,
+            chunk_positions: std::collections::HashMap::new(),
+            material_batcher,
+            batching_performance_monitor,
+            dynamic_texture_atlas,
+            pbr_lighting_system,
+            light_buffer,
+            material_buffer,
+            chunk_streaming_system,
         })
     }
 
@@ -568,6 +686,7 @@ impl MetalRenderer {
     }
 
     pub fn render_frame(&mut self, mesh: &Mesh, camera: &Camera, time: f32, time_of_day: f32) -> bool {
+        let frame_start = std::time::Instant::now();
         let command_buffer = self.command_queue.new_command_buffer();
 
         let drawable = match self.layer.next_drawable() {
@@ -577,6 +696,8 @@ impl MetalRenderer {
 
         // Update uniforms
         self.update_uniforms(camera, time, time_of_day);
+
+        // PBR lighting will be updated outside render frame
 
         // Create depth texture
         let depth_texture = {
@@ -614,6 +735,17 @@ impl MetalRenderer {
         encoder.set_render_pipeline_state(&self.render_pipeline);
         encoder.set_depth_stencil_state(&self.depth_stencil_state);
 
+        // Set viewport to match drawable size
+        let viewport = MTLViewport {
+            originX: 0.0,
+            originY: 0.0,
+            width: self.drawable_size.width,
+            height: self.drawable_size.height,
+            znear: 0.0,
+            zfar: 1.0,
+        };
+        encoder.set_viewport(viewport);
+
         command_buffer.set_label("Main Render Pass");
 
         // Render mesh
@@ -623,6 +755,43 @@ impl MetalRenderer {
         encoder.end_encoding();
         command_buffer.present_drawable(&drawable);
         command_buffer.commit();
+
+        // Record performance metrics
+        let frame_time = frame_start.elapsed();
+        let fps = if frame_time.as_secs_f32() > 0.0 { 1.0 / frame_time.as_secs_f32() } else { 0.0 };
+
+        // Collect batching statistics
+        let batching_stats = self.material_batcher.get_stats();
+        let batch_count = self.material_batcher.get_batch_count();
+
+        // Create performance metrics
+        let metrics = PerformanceMetrics {
+            frame_time,
+            fps,
+            vertex_count: mesh.vertices.len(),
+            triangle_count: mesh.indices.len() / 3,
+            draw_calls: if batch_count > 0 { batch_count } else { 1 }, // At least 1 draw call
+            batching_efficiency: batching_stats.efficiency_percentage(),
+            memory_usage_mb: 0.0, // TODO: Implement memory tracking
+            gpu_usage_percent: 0.0, // TODO: Implement GPU usage tracking
+        };
+
+        // Record the frame metrics
+        self.batching_performance_monitor.record_frame(metrics);
+
+        // Record batching statistics if we have batches
+        if batch_count > 0 {
+            let batch_perf = BatchPerformanceStats {
+                material_distributions: std::collections::HashMap::new(), // TODO: Implement material distribution tracking
+                batch_sizes: vec![],
+                average_batch_size: 0.0,
+                total_vertices_saved: batching_stats.vertices_processed,
+                total_draw_calls_saved: batching_stats.draw_calls_saved,
+                batching_overhead_ms: 0.0, // TODO: Measure batching overhead
+            };
+
+            self.batching_performance_monitor.record_batching_stats(batching_stats, batch_perf);
+        }
 
         true
     }
@@ -636,6 +805,10 @@ impl MetalRenderer {
         time_of_day: f32,
         ui_draw_data: Option<&DrawData>,
     ) -> bool {
+        // Update chunk streaming system with current camera position
+        self.chunk_streaming_system.update_player_position(camera.eye);
+        self.chunk_streaming_system.process_streaming();
+
         let command_buffer = self.command_queue.new_command_buffer();
 
         let drawable = match self.layer.next_drawable() {
@@ -645,6 +818,8 @@ impl MetalRenderer {
 
         // Update uniforms
         self.update_uniforms(camera, time, time_of_day);
+
+        // PBR lighting will be updated outside render frame
 
         // Create depth texture
         let depth_texture = {
@@ -679,6 +854,17 @@ impl MetalRenderer {
         depth_attachment.set_store_action(MTLStoreAction::DontCare); // Memoryless optimization
 
         let encoder = command_buffer.new_render_command_encoder(&render_pass_descriptor);
+
+        // Set viewport to match drawable size
+        let viewport = MTLViewport {
+            originX: 0.0,
+            originY: 0.0,
+            width: self.drawable_size.width,
+            height: self.drawable_size.height,
+            znear: 0.0,
+            zfar: 1.0,
+        };
+        encoder.set_viewport(viewport);
 
         // Render 3D scene first
         command_buffer.set_label("Main Render Pass");
@@ -1371,5 +1557,461 @@ impl MetalRenderer {
 
     pub fn get_device(&self) -> &Device {
         &self.device
+    }
+
+    // Performance monitoring and error recovery methods
+    pub fn start_frame_timing(&mut self) {
+        self.last_frame_time = std::time::Instant::now();
+    }
+
+    pub fn end_frame_timing(&mut self) {
+        let frame_time = self.last_frame_time.elapsed().as_secs_f32();
+        self.performance_monitor.record_frame_time(frame_time);
+
+        // Log performance warnings if needed
+        if frame_time > 0.033 { // More than 30 FPS threshold
+            self.performance_monitor.log_performance_warning();
+        }
+    }
+
+    pub fn record_draw_call(&mut self, vertex_count: u32, triangle_count: u32) {
+        self.performance_monitor.record_draw_call(vertex_count, triangle_count);
+    }
+
+    pub fn get_performance_stats(&self) -> (f32, u32, u32, u32) {
+        let fps = self.performance_monitor.get_average_fps();
+        let (draw_calls, vertices, triangles) = self.performance_monitor.get_frame_stats();
+        (fps, draw_calls, vertices, triangles)
+    }
+
+    pub fn reset_frame_stats(&mut self) {
+        self.performance_monitor.reset_frame_stats();
+    }
+
+    pub fn validate_resources(&self) -> MetalResult<()> {
+        ErrorRecovery::validate_resource(&self.font_texture, "font_texture")?;
+        ErrorRecovery::validate_resource(&self.atlas_texture, "atlas_texture")?;
+        ErrorRecovery::validate_resource(&self.ui_pipeline, "ui_pipeline")?;
+        Ok(())
+    }
+
+    pub fn cleanup_resources(&mut self) {
+        log::info!("🧹 Cleaning up Metal renderer resources");
+
+        // Clear optional resources
+        self.font_texture = None;
+        self.atlas_texture = None;
+        self.atlas_sampler = None;
+        self.ui_pipeline = None;
+        self.ui_vertex_buffer = None;
+        self.ui_index_buffer = None;
+        self.ui_uniform_buffer = None;
+        self.font_sampler = None;
+
+        // Reset performance monitor
+        self.performance_monitor = PerformanceMonitor::new();
+
+        log::info!("✅ Metal renderer resources cleaned up");
+    }
+
+    // Hierarchical frustum culling methods
+    pub fn register_chunk(&mut self, x: i32, y: i32, z: i32) {
+        let chunk_id = ChunkId::new(x, y, z);
+        self.hierarchical_culler.register_chunk(chunk_id);
+    }
+
+    pub fn unregister_chunk(&mut self, x: i32, y: i32, z: i32) {
+        let chunk_id = ChunkId::new(x, y, z);
+        self.hierarchical_culler.unregister_chunk(chunk_id);
+    }
+
+    pub fn update_frustum_culling(&mut self, camera: &Camera) {
+        // Create view-projection matrix
+        let view_proj = camera.build_view_projection_matrix();
+
+        // Create camera frustum
+        let frustum = CameraFrustum::from_view_projection(&view_proj);
+
+        // Get camera position
+        let camera_pos = camera.eye;
+
+        // Perform frustum culling
+        self.visible_chunks = self.hierarchical_culler.cull_chunks(&frustum, &camera_pos);
+
+        // Update performance statistics
+        let stats = self.hierarchical_culler.get_statistics();
+        self.performance_monitor.record_culling_stats(
+            stats.total_chunks,
+            stats.visible_chunks,
+            stats.culled_chunks
+        );
+    }
+
+    /// Update LOD levels for all chunks based on camera distance
+    pub fn update_lod_system(&mut self, camera: &Camera) {
+        let camera_pos = cgmath::Vector3::new(camera.eye.x, camera.eye.y, camera.eye.z);
+        self.lod_system.update_lod_levels(&camera_pos, &self.chunk_positions);
+
+        // Log statistics periodically
+        let stats = self.lod_system.get_statistics();
+        stats.log_if_significant();
+    }
+
+    /// Register a chunk position for LOD calculations
+    pub fn register_chunk_position(&mut self, chunk_id: ChunkId, position: cgmath::Vector3<f32>) {
+        self.chunk_positions.insert(chunk_id, position);
+    }
+
+    /// Unregister a chunk position when chunk is removed
+    pub fn unregister_chunk_position(&mut self, chunk_id: ChunkId) {
+        self.chunk_positions.remove(&chunk_id);
+    }
+
+    /// Get the current LOD level for a chunk
+    pub fn get_chunk_lod(&self, chunk_id: &ChunkId) -> Option<LodLevel> {
+        self.lod_system.get_chunk_lod(chunk_id)
+    }
+
+    /// Get chunks that need LOD updates this frame
+    pub fn get_chunks_needing_lod_update(&mut self) -> Vec<ChunkId> {
+        self.lod_system.get_chunks_needing_update()
+    }
+
+    /// Get LOD system statistics for performance monitoring
+    pub fn get_lod_statistics(&self) -> LodStatistics {
+        self.lod_system.get_statistics()
+    }
+
+    /// Update LOD system configuration
+    pub fn update_lod_config(&mut self, config: LodConfig) {
+        self.lod_system.update_config(config);
+        log::info!("📊 LOD system configuration updated");
+    }
+
+    /// Enable or disable the LOD system
+    pub fn set_lod_enabled(&mut self, enabled: bool) {
+        self.lod_system.set_enabled(enabled);
+        log::info!("📊 LOD system {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    // Material Batching System Methods
+
+    /// Add a mesh to the material batching system
+    pub fn add_mesh_to_batch(&mut self, mesh: &Mesh) {
+        self.material_batcher.add_mesh(mesh);
+    }
+
+    /// Finalize material batches and create GPU buffers
+    pub fn finalize_material_batches(&mut self) -> Result<(), String> {
+        self.material_batcher.finalize_batches(&self.device)
+    }
+
+    /// Render all material batches with optimized draw calls
+    pub fn render_material_batches(&mut self, encoder: &RenderCommandEncoderRef) {
+        let batches = self.material_batcher.get_sorted_batches();
+
+        for batch in batches {
+            if let (Some(vertex_buffer), Some(index_buffer)) = (&batch.vertex_buffer, &batch.index_buffer) {
+                // Set vertex and uniform buffers
+                encoder.set_vertex_buffer(0, Some(vertex_buffer), 0);
+                encoder.set_vertex_buffer(1, Some(&self.uniform_buffer), 0);
+                encoder.set_fragment_buffer(1, Some(&self.uniform_buffer), 0);
+
+                // Bind atlas texture and sampler for fragment shader
+                if let Some(atlas_texture) = &self.atlas_texture {
+                    encoder.set_fragment_texture(0, Some(atlas_texture));
+                }
+                if let Some(atlas_sampler) = &self.atlas_sampler {
+                    encoder.set_fragment_sampler_state(0, Some(atlas_sampler));
+                }
+
+                // Single draw call for entire batch
+                encoder.draw_indexed_primitives(
+                    MTLPrimitiveType::Triangle,
+                    batch.indices.len() as u64,
+                    MTLIndexType::UInt32,
+                    index_buffer,
+                    0,
+                );
+
+                // Record performance stats
+                self.performance_monitor.record_draw_call(
+                    batch.vertices.len() as u32,
+                    batch.triangle_count() as u32
+                );
+            }
+        }
+    }
+
+    /// Clear material batches for the next frame
+    pub fn clear_material_batches(&mut self) {
+        self.material_batcher.clear();
+    }
+
+    /// Get material batching statistics
+    pub fn get_batching_stats(&self) -> &BatchingStats {
+        self.material_batcher.get_stats()
+    }
+
+    /// Get the number of draw calls saved by batching
+    pub fn get_draw_calls_saved(&self) -> usize {
+        self.material_batcher.get_draw_calls_saved()
+    }
+
+    // Performance Monitoring System Methods
+
+    /// Get the batching performance monitor
+    pub fn get_batching_performance_monitor(&self) -> &BatchingPerformanceMonitor {
+        &self.batching_performance_monitor
+    }
+
+    /// Get current average FPS
+    pub fn get_average_fps(&self) -> f32 {
+        self.batching_performance_monitor.get_average_fps()
+    }
+
+    /// Get current frame time statistics (min, avg, max)
+    pub fn get_frame_time_stats(&self) -> (std::time::Duration, std::time::Duration, std::time::Duration) {
+        self.batching_performance_monitor.get_frame_time_stats()
+    }
+
+    /// Get performance alerts
+    pub fn get_performance_alerts(&self) -> &[crate::performance_monitor::PerformanceAlert] {
+        self.batching_performance_monitor.get_alerts()
+    }
+
+    /// Get batching summary statistics
+    pub fn get_batching_summary(&self) -> Option<crate::performance_monitor::BatchingSummary> {
+        self.batching_performance_monitor.get_batching_summary()
+    }
+
+    /// Update performance monitoring configuration
+    pub fn update_performance_config(&mut self, config: MonitorConfig) {
+        self.batching_performance_monitor.update_config(config);
+        log::info!("📈 Performance monitoring configuration updated");
+    }
+
+    /// Enable or disable performance monitoring
+    pub fn set_performance_monitoring_enabled(&mut self, enabled: bool) {
+        self.batching_performance_monitor.set_enabled(enabled);
+        log::info!("📈 Performance monitoring {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    pub fn get_visible_chunks(&self) -> &[ChunkId] {
+        &self.visible_chunks
+    }
+
+    pub fn should_render_chunk(&self, x: i32, y: i32, z: i32) -> bool {
+        let chunk_id = ChunkId::new(x, y, z);
+        self.visible_chunks.contains(&chunk_id)
+    }
+
+    pub fn get_culling_statistics(&self) -> crate::culling::CullingStatistics {
+        self.hierarchical_culler.get_statistics()
+    }
+
+    pub fn rebuild_culling_octree(&mut self) {
+        self.hierarchical_culler.rebuild_octree();
+    }
+
+    // Dynamic Texture Atlas System Methods
+
+    /// Get UV coordinates for a material type
+    pub fn get_material_uv(&mut self, material_type: MaterialType) -> Option<AtlasUV> {
+        self.dynamic_texture_atlas.get_material_uv(material_type)
+    }
+
+    /// Get Metal texture for a material type
+    pub fn get_material_texture(&self, material_type: MaterialType) -> Option<&Texture> {
+        self.dynamic_texture_atlas.get_material_texture(material_type)
+    }
+
+    /// Get all atlas textures for GPU binding
+    pub fn get_atlas_textures(&self) -> Vec<&Texture> {
+        self.dynamic_texture_atlas.get_all_textures()
+    }
+
+    /// Get texture atlas performance statistics
+    pub fn get_atlas_stats(&self) -> &AtlasStats {
+        self.dynamic_texture_atlas.get_stats()
+    }
+
+    /// Preload common material textures
+    pub fn preload_atlas_materials(&mut self) -> Result<(), String> {
+        self.dynamic_texture_atlas.preload_materials()
+    }
+
+    /// Add a custom material texture to the atlas system
+    pub fn add_material_to_atlas(&mut self, material_type: MaterialType, size: u32) -> Option<AtlasUV> {
+        self.dynamic_texture_atlas.add_material_texture(material_type, size)
+    }
+
+    /// Clear all texture atlases
+    pub fn clear_texture_atlases(&mut self) {
+        self.dynamic_texture_atlas.clear();
+        log::info!("🖼️  Texture atlases cleared");
+    }
+
+    // ===== PBR LIGHTING METHODS =====
+
+    /// Update PBR lighting system
+    pub fn update_lighting(&mut self, delta_time: f32) {
+        // Update time of day cycle
+        self.pbr_lighting_system.update_time_of_day(delta_time);
+
+        // Update GPU light buffer
+        self.update_light_buffer();
+
+        // Update GPU material buffer
+        self.update_material_buffer();
+    }
+
+    /// Update GPU light buffer with current light data
+    fn update_light_buffer(&mut self) {
+        let gpu_lights = self.pbr_lighting_system.get_gpu_lights();
+
+        if !gpu_lights.is_empty() {
+            let buffer_size = std::mem::size_of::<GPULight>() * gpu_lights.len();
+            if buffer_size <= self.light_buffer.length() as usize {
+                unsafe {
+                    let contents = self.light_buffer.contents() as *mut GPULight;
+                    std::ptr::copy_nonoverlapping(gpu_lights.as_ptr(), contents, gpu_lights.len());
+                }
+            } else {
+                log::warn!("⚠️  Too many lights for buffer ({}), truncating to fit", gpu_lights.len());
+                let max_lights = self.light_buffer.length() as usize / std::mem::size_of::<GPULight>();
+                unsafe {
+                    let contents = self.light_buffer.contents() as *mut GPULight;
+                    std::ptr::copy_nonoverlapping(gpu_lights.as_ptr(), contents, max_lights);
+                }
+            }
+        }
+    }
+
+    /// Update GPU material buffer with current material data
+    fn update_material_buffer(&mut self) {
+        let materials = self.pbr_lighting_system.material_library.get_all_materials();
+        let mut material_array = Vec::new();
+
+        // Convert materials to array in consistent order
+        for material_type in [
+            MaterialType::Earth, MaterialType::Stone, MaterialType::Water,
+            MaterialType::Grass, MaterialType::Sand, MaterialType::Wood,
+            MaterialType::Crystal, MaterialType::Lava, MaterialType::Air
+        ] {
+            if let Some(material) = materials.get(&material_type) {
+                material_array.push(*material);
+            } else {
+                material_array.push(PBRMaterial::default());
+            }
+        }
+
+        if !material_array.is_empty() {
+            let buffer_size = std::mem::size_of::<PBRMaterial>() * material_array.len();
+            if buffer_size <= self.material_buffer.length() as usize {
+                unsafe {
+                    let contents = self.material_buffer.contents() as *mut PBRMaterial;
+                    std::ptr::copy_nonoverlapping(material_array.as_ptr(), contents, material_array.len());
+                }
+            }
+        }
+    }
+
+    /// Add a light to the PBR system
+    pub fn add_light(&mut self, light: Light) -> usize {
+        self.pbr_lighting_system.add_light(light)
+    }
+
+    /// Remove a light from the PBR system
+    pub fn remove_light(&mut self, index: usize) {
+        self.pbr_lighting_system.remove_light(index);
+    }
+
+    /// Set weather intensity (0.0 = clear, 1.0 = storm)
+    pub fn set_weather(&mut self, intensity: f32) {
+        self.pbr_lighting_system.set_weather(intensity);
+    }
+
+    /// Get current time of day (0.0 = midnight, 0.5 = noon, 1.0 = midnight)
+    pub fn get_time_of_day(&self) -> f32 {
+        self.pbr_lighting_system.time_of_day
+    }
+
+    /// Set time of day manually
+    pub fn set_time_of_day(&mut self, time: f32) {
+        self.pbr_lighting_system.time_of_day = time.clamp(0.0, 1.0);
+    }
+
+    /// Get PBR material for a voxel type
+    pub fn get_pbr_material(&self, material_type: MaterialType) -> PBRMaterial {
+        self.pbr_lighting_system.get_material(material_type)
+    }
+
+    /// Update a PBR material
+    pub fn update_pbr_material(&mut self, material_type: MaterialType, material: PBRMaterial) {
+        self.pbr_lighting_system.update_material(material_type, material);
+    }
+
+    /// Get current environment lighting settings
+    pub fn get_environment_lighting(&self) -> &EnvironmentLighting {
+        &self.pbr_lighting_system.environment
+    }
+
+    /// Enable/disable global illumination
+    pub fn set_global_illumination(&mut self, enabled: bool) {
+        self.pbr_lighting_system.global_illumination = enabled;
+        log::info!("🌍 Global illumination: {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Enable/disable screen space reflections
+    pub fn set_screen_space_reflections(&mut self, enabled: bool) {
+        self.pbr_lighting_system.screen_space_reflections = enabled;
+        log::info!("🪞 Screen space reflections: {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Enable/disable bloom effect
+    pub fn set_bloom(&mut self, enabled: bool) {
+        self.pbr_lighting_system.bloom_enabled = enabled;
+        log::info!("✨ Bloom effect: {}", if enabled { "enabled" } else { "disabled" });
+    }
+
+    /// Set tone mapping mode
+    pub fn set_tone_mapping(&mut self, mode: ToneMappingMode) {
+        log::info!("🎨 Tone mapping: {:?}", mode);
+        self.pbr_lighting_system.tone_mapping = mode;
+    }
+
+    /// Get lighting debug info for a position
+    pub fn debug_lighting(&self, world_pos: cgmath::Point3<f32>, normal: cgmath::Vector3<f32>) -> cgmath::Vector3<f32> {
+        self.pbr_lighting_system.calculate_lighting_debug(world_pos, normal)
+    }
+
+    /// Get chunk streaming statistics
+    pub fn get_streaming_stats(&self) -> &crate::chunk_streaming::StreamingStats {
+        self.chunk_streaming_system.get_statistics()
+    }
+
+    /// Get streaming configuration
+    pub fn get_streaming_config(&self) -> &crate::chunk_streaming::StreamingConfig {
+        self.chunk_streaming_system.get_config()
+    }
+
+    /// Get streamed chunks for rendering
+    pub fn get_streamed_chunks(&self, camera: &Camera) -> Vec<&crate::chunk_streaming::ChunkData> {
+        let frustum = camera.get_frustum();
+        self.chunk_streaming_system.get_visible_chunks(Some(&frustum))
+    }
+
+    /// Force load a specific chunk (for testing)
+    pub fn force_load_chunk(&mut self, coords: crate::chunk_streaming::ChunkCoords) {
+        self.chunk_streaming_system.force_load_chunk(coords);
+    }
+}
+
+impl Drop for MetalRenderer {
+    fn drop(&mut self) {
+        log::info!("🔄 Dropping MetalRenderer - performing cleanup");
+        self.cleanup_resources();
+        ErrorRecovery::graceful_shutdown();
     }
 }

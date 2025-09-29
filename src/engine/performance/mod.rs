@@ -10,6 +10,7 @@ pub mod benchmarks;
 pub mod monitoring;
 pub mod enhanced_memory_management;
 pub mod comprehensive_monitoring;
+pub mod advanced_optimization;
 
 pub use lod_system::{
     LODSystem, LODLevel, LODConfig, RenderableObject, LODMetrics
@@ -50,6 +51,12 @@ pub use enhanced_memory_management::{
 pub use comprehensive_monitoring::{
     ComprehensiveMonitoringSystem, MonitoringConfig as ComprehensiveMonitoringConfig,
     PerformanceMetrics, PerformanceAlert, PerformanceReport as ImportedPerformanceReport, PerformanceThresholds
+};
+
+pub use advanced_optimization::{
+    AdvancedOptimizationSystem, OptimizationConfig, OptimizationProfile,
+    RenderingOptimizer, MemoryOptimizer, CacheOptimizer, ParallelOptimizer,
+    AdaptivePerformanceTuner, PerformanceProfiler, OptimizationMetrics
 };
 
 use crate::engine::error::RobinResult;
@@ -107,6 +114,7 @@ pub struct PerformanceManager {
     gpu_accelerator: GPUAccelerator,
     memory_manager: MemoryManager,
     background_processor: BackgroundProcessor,
+    advanced_optimizer: Option<AdvancedOptimizationSystem>,
     stats: PerformanceStats,
     frame_counter: u64,
     last_stats_update: Instant,
@@ -145,6 +153,24 @@ impl PerformanceManager {
             ..Default::default()
         };
 
+        // Create advanced optimizer if requested
+        let advanced_optimizer = if config.adaptive_quality {
+            let opt_config = OptimizationConfig {
+                enable_gpu_occlusion: config.gpu_acceleration_enabled,
+                enable_dynamic_batching: true,
+                enable_memory_pooling: true,
+                enable_cache_optimization: true,
+                enable_parallel_processing: config.background_processing_enabled,
+                enable_adaptive_tuning: config.adaptive_quality,
+                target_fps: config.target_fps,
+                memory_budget_mb: config.memory_budget_mb,
+                optimization_profile: OptimizationProfile::Balanced,
+            };
+            Some(AdvancedOptimizationSystem::new(opt_config))
+        } else {
+            None
+        };
+
         Ok(Self {
             memory_manager: MemoryManager::new(config.memory_budget_mb)?,
             config,
@@ -152,6 +178,7 @@ impl PerformanceManager {
             chunk_manager: ChunkManager::new(chunk_config)?,
             gpu_accelerator: GPUAccelerator::new(gpu_config)?,
             background_processor: BackgroundProcessor::new(processor_config)?,
+            advanced_optimizer,
             stats: PerformanceStats::default(),
             frame_counter: 0,
             last_stats_update: Instant::now(),
@@ -166,6 +193,11 @@ impl PerformanceManager {
         self.memory_manager.initialize()?;
         self.background_processor.initialize()?;
 
+        // Initialize advanced optimizer if present
+        if let Some(ref mut optimizer) = self.advanced_optimizer {
+            optimizer.initialize()?;
+        }
+
         println!("Performance Manager initialized:");
         println!("  Target FPS: {}", self.config.target_fps);
         println!("  Memory Budget: {}MB", self.config.memory_budget_mb);
@@ -174,6 +206,7 @@ impl PerformanceManager {
         println!("  GPU Acceleration: {}", if self.config.gpu_acceleration_enabled { "Enabled" } else { "Disabled" });
         println!("  Background Processing: {}", if self.config.background_processing_enabled { "Enabled" } else { "Disabled" });
         println!("  Adaptive Quality: {}", if self.config.adaptive_quality { "Enabled" } else { "Disabled" });
+        println!("  Advanced Optimization: {}", if self.advanced_optimizer.is_some() { "Enabled" } else { "Disabled" });
 
         Ok(())
     }
@@ -181,6 +214,24 @@ impl PerformanceManager {
     pub fn update(&mut self, delta_time: f32, camera_position: [f32; 3]) -> RobinResult<()> {
         let frame_start = Instant::now();
         self.frame_counter += 1;
+
+        // Use advanced optimizer if available
+        if let Some(ref mut optimizer) = self.advanced_optimizer {
+            // Optimize frame before rendering
+            optimizer.optimize_frame()?;
+
+            // Update with metrics
+            let frame_metrics = crate::engine::performance::advanced_optimization::FrameMetrics {
+                frame_time: delta_time,
+                draw_calls: 0, // Will be updated by rendering system
+                triangles_rendered: 0, // Will be updated by rendering system
+                texture_switches: 0,
+                shader_switches: 0,
+                memory_allocated: self.stats.memory_usage_mb as usize * 1024 * 1024,
+                cache_misses: 0,
+            };
+            optimizer.update(delta_time, frame_metrics)?;
+        }
 
         // Update subsystems
         self.lod_system.update(camera_position)?;
@@ -397,8 +448,54 @@ impl PerformanceManager {
         Ok(())
     }
 
-    pub fn record_render_metrics(&mut self, _render_time: std::time::Duration, _triangles_rendered: u32, _draw_calls: u32) {
-        // Placeholder implementation - would record rendering performance metrics
+    pub fn record_render_metrics(&mut self, render_time: std::time::Duration, triangles_rendered: u32, draw_calls: u32) {
+        // Update advanced optimizer with rendering metrics
+        if let Some(ref mut optimizer) = self.advanced_optimizer {
+            let metrics = crate::engine::performance::advanced_optimization::FrameMetrics {
+                frame_time: render_time.as_secs_f32(),
+                draw_calls,
+                triangles_rendered,
+                texture_switches: 0, // To be tracked by renderer
+                shader_switches: 0,  // To be tracked by renderer
+                memory_allocated: self.stats.memory_usage_mb as usize * 1024 * 1024,
+                cache_misses: 0,
+            };
+            let _ = optimizer.update(render_time.as_secs_f32(), metrics);
+        }
+    }
+
+    /// Get advanced optimization metrics
+    pub fn get_advanced_optimization_metrics(&self) -> Option<OptimizationMetrics> {
+        self.advanced_optimizer.as_ref().map(|opt| opt.get_metrics())
+    }
+
+    /// Enable advanced optimization system
+    pub fn enable_advanced_optimization(&mut self) -> RobinResult<()> {
+        if self.advanced_optimizer.is_none() {
+            let config = OptimizationConfig {
+                enable_gpu_occlusion: self.config.gpu_acceleration_enabled,
+                enable_dynamic_batching: true,
+                enable_memory_pooling: true,
+                enable_cache_optimization: true,
+                enable_parallel_processing: self.config.background_processing_enabled,
+                enable_adaptive_tuning: true,
+                target_fps: self.config.target_fps,
+                memory_budget_mb: self.config.memory_budget_mb,
+                optimization_profile: OptimizationProfile::Aggressive,
+            };
+            let mut optimizer = AdvancedOptimizationSystem::new(config);
+            optimizer.initialize()?;
+            self.advanced_optimizer = Some(optimizer);
+        }
+        Ok(())
+    }
+
+    /// Switch optimization profile
+    pub fn set_optimization_profile(&mut self, profile: OptimizationProfile) -> RobinResult<()> {
+        if let Some(ref mut optimizer) = self.advanced_optimizer {
+            optimizer.set_profile(profile);
+        }
+        Ok(())
     }
 }
 

@@ -6,11 +6,11 @@
  */
 
 use crate::engine::{
-    error::{RobinError, RobinResult},
+    error::RobinResult,
     graphics::GraphicsContext,
     gpu::GPUAccelerationSystem,
 };
-use lighting::LightingSystem;
+use lighting::{LightingSystem, LightSource};
 use materials::PBRMaterialSystem;
 use postprocessing::PostProcessingSystem;
 use culling::CullingSystem;
@@ -23,12 +23,6 @@ pub mod postprocessing;
 pub mod culling;
 pub mod batching;
 pub mod shaders;
-
-use materials::*;
-use lighting::*;
-use postprocessing::*;
-use culling::*;
-use batching::*;
 
 /// Advanced rendering pipeline configuration
 #[derive(Debug, Clone)]

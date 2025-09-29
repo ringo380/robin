@@ -6,7 +6,7 @@
  */
 
 use crate::engine::{
-    error::{RobinError, RobinResult},
+    error::RobinResult,
     graphics::GraphicsContext,
     rendering::{RenderObject, Camera},
     math::{Vec3, Mat4, BoundingBox, BoundingSphere},

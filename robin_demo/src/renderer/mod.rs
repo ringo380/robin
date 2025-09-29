@@ -4,9 +4,10 @@ pub mod metal_renderer;
 pub mod shaders;
 pub mod mesh;
 pub mod texture_atlas;
+pub mod error_handling;
 
 pub use metal_renderer::MetalRenderer;
-pub use mesh::Mesh;
+pub use mesh::{Mesh, Vertex};
 pub use texture_atlas::TextureAtlas;
 
 use cgmath::{Matrix4, Vector3, Point3};
@@ -194,20 +195,49 @@ pub struct Camera {
     pub zfar: f32,
     pub yaw: f32,
     pub pitch: f32,
+    // Enhanced movement system
+    velocity: Vector3<f32>,
+    angular_velocity: Vector3<f32>,
+    movement_momentum: f32,
+    mouse_sensitivity: f32,
+    smooth_factor: f32,
+    max_velocity: f32,
+    acceleration: f32,
+    friction: f32,
+    // Smooth look parameters
+    target_yaw: f32,
+    target_pitch: f32,
+    look_smooth_factor: f32,
 }
 
 impl Camera {
     pub fn new(width: f32, height: f32) -> Self {
+        let initial_yaw = -std::f32::consts::FRAC_PI_2;
+        let initial_pitch = -0.3;
+
         Self {
-            eye: Point3::new(0.0, 10.0, 0.0),
-            target: Point3::new(0.0, 10.0, -1.0),
+            eye: Point3::new(0.0, 15.0, 10.0),     // Elevated position behind terrain
+            target: Point3::new(0.0, 8.0, 0.0),   // Looking down at terrain center
             up: Vector3::new(0.0, 1.0, 0.0),
             aspect: width / height,
             fovy: 60.0,
             znear: 0.1,
             zfar: 1000.0,
-            yaw: -std::f32::consts::FRAC_PI_2,
-            pitch: 0.0,
+            yaw: initial_yaw,
+            pitch: initial_pitch,
+            // Enhanced movement parameters
+            velocity: Vector3::new(0.0, 0.0, 0.0),
+            angular_velocity: Vector3::new(0.0, 0.0, 0.0),
+            movement_momentum: 0.85,               // How much momentum is retained (0-1)
+            mouse_sensitivity: 0.002,              // Mouse look sensitivity
+            smooth_factor: 0.15,                   // Movement smoothing factor
+            max_velocity: 25.0,                    // Maximum movement speed
+            acceleration: 45.0,                    // Movement acceleration
+            friction: 12.0,                        // Movement friction/deceleration
+            // Smooth look parameters
+            target_yaw: initial_yaw,
+            target_pitch: initial_pitch,
+            look_smooth_factor: 0.2,               // Mouse look smoothing
         }
     }
 
@@ -220,31 +250,100 @@ impl Camera {
     }
 
     pub fn update_from_input(&mut self, forward: f32, right: f32, up: f32, mouse_dx: f32, mouse_dy: f32) {
+        self.update_smooth_look(mouse_dx, mouse_dy);
+        self.update_smooth_movement(forward, right, up, 1.0 / 60.0); // Assume 60 FPS for now
+    }
+
+    /// Enhanced update method with proper delta time
+    pub fn update_from_input_with_delta(&mut self, forward: f32, right: f32, up: f32, mouse_dx: f32, mouse_dy: f32, delta_time: f32) {
+        self.update_smooth_look(mouse_dx, mouse_dy);
+        self.update_smooth_movement(forward, right, up, delta_time);
+    }
+
+    /// Enhanced smooth camera movement with momentum and acceleration
+    pub fn update_smooth_movement(&mut self, forward: f32, right: f32, up: f32, delta_time: f32) {
         use cgmath::InnerSpace;
 
-        // Mouse look with smooth movement
-        self.yaw += mouse_dx * 0.002;
-        self.pitch -= mouse_dy * 0.002;
-        self.pitch = self.pitch.clamp(-1.5, 1.5);
-
-        // Calculate movement vectors
+        // Calculate current direction vectors from camera orientation
         let forward_dir = Vector3::new(
             self.yaw.cos() * self.pitch.cos(),
             self.pitch.sin(),
             self.yaw.sin() * self.pitch.cos(),
         ).normalize();
-
         let right_dir = forward_dir.cross(Vector3::new(0.0, 1.0, 0.0)).normalize();
         let up_dir = Vector3::new(0.0, 1.0, 0.0);
 
-        // Apply movement
-        let movement_speed = 0.2;
-        self.eye += forward_dir * forward * movement_speed;
-        self.eye += right_dir * right * movement_speed;
-        self.eye += up_dir * up * movement_speed;
+        // Calculate desired velocity based on input
+        let mut desired_velocity = Vector3::new(0.0, 0.0, 0.0);
+        desired_velocity += forward_dir * forward * self.max_velocity;
+        desired_velocity += right_dir * right * self.max_velocity;
+        desired_velocity += up_dir * up * self.max_velocity;
 
-        // Update target
+        // Apply acceleration toward desired velocity
+        let velocity_diff = desired_velocity - self.velocity;
+        let acceleration_force = velocity_diff * self.acceleration * delta_time;
+        self.velocity += acceleration_force;
+
+        // Apply friction when no input is given
+        if forward.abs() < 0.1 && right.abs() < 0.1 && up.abs() < 0.1 {
+            self.velocity *= 1.0 - (self.friction * delta_time).min(1.0);
+        }
+
+        // Apply momentum damping to prevent infinite acceleration
+        self.velocity *= self.movement_momentum;
+
+        // Clamp velocity to maximum
+        let speed = self.velocity.magnitude();
+        if speed > self.max_velocity {
+            self.velocity = self.velocity.normalize() * self.max_velocity;
+        }
+
+        // Update position with smooth interpolation
+        let position_delta = self.velocity * delta_time;
+        self.eye += position_delta;
+
+        // Update target based on current orientation
         self.target = self.eye + forward_dir;
+    }
+
+    /// Smooth mouse look with momentum
+    pub fn update_smooth_look(&mut self, mouse_dx: f32, mouse_dy: f32) {
+        // Update target angles with mouse input
+        self.target_yaw += mouse_dx * self.mouse_sensitivity;
+        self.target_pitch -= mouse_dy * self.mouse_sensitivity;
+
+        // Clamp pitch to reasonable limits
+        self.target_pitch = self.target_pitch.clamp(-1.55, 1.55); // ~89 degrees
+
+        // Smoothly interpolate to target angles
+        let yaw_diff = self.target_yaw - self.yaw;
+        let pitch_diff = self.target_pitch - self.pitch;
+
+        self.yaw += yaw_diff * self.look_smooth_factor;
+        self.pitch += pitch_diff * self.look_smooth_factor;
+    }
+
+    /// Get current velocity for external systems (e.g., sound effects, particle systems)
+    pub fn get_velocity(&self) -> Vector3<f32> {
+        self.velocity
+    }
+
+    /// Get current speed for external systems
+    pub fn get_speed(&self) -> f32 {
+        use cgmath::InnerSpace;
+        self.velocity.magnitude()
+    }
+
+    /// Adjust camera sensitivity at runtime
+    pub fn set_mouse_sensitivity(&mut self, sensitivity: f32) {
+        self.mouse_sensitivity = sensitivity.max(0.0001); // Prevent zero sensitivity
+    }
+
+    /// Adjust movement parameters at runtime
+    pub fn set_movement_parameters(&mut self, max_velocity: f32, acceleration: f32, friction: f32) {
+        self.max_velocity = max_velocity.max(0.1);
+        self.acceleration = acceleration.max(0.1);
+        self.friction = friction.max(0.1);
     }
 
     pub fn get_forward_vector(&self) -> Vector3<f32> {

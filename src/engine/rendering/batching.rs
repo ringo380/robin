@@ -9,9 +9,8 @@ use crate::engine::{
     error::{RobinError, RobinResult},
     graphics::GraphicsContext,
     rendering::{RenderObject, MaterialHandle, MeshHandle, TextureHandle},
-    math::{Mat4, Vec3},
 };
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 
 /// Batching and instancing system for optimized rendering
 #[derive(Debug)]
