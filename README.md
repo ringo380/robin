@@ -1,6 +1,13 @@
 # Robin Game Engine
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/ringo380/robin/releases)
+[![Project](https://img.shields.io/badge/project-board-brightgreen.svg)](https://github.com/users/ringo380/projects/3)
+
 A comprehensive 2D/3D voxel game engine built from scratch in Rust, featuring real-time 3D rendering, voxel terrain generation, and an Engineer Build Mode system for in-game world creation.
+
+📋 **[Project Board](https://github.com/users/ringo380/projects/3)** | 🗺️ **[Roadmap](/.github/ROADMAP.md)** | 🐛 **[Issues](https://github.com/ringo380/robin/issues)** | 🎯 **[Milestones](https://github.com/ringo380/robin/milestones)**
 
 ## 🎉 Latest Achievement: Unified Robin Demo!
 
@@ -314,16 +321,31 @@ RUST_BACKTRACE=full cargo run --bin voxel_world_fixed
 
 ## Contributing
 
+We welcome contributions! Please see our [Roadmap](/.github/ROADMAP.md) for current development priorities.
+
+**Good First Issues**: Check issues labeled [`good first issue`](https://github.com/ringo380/robin/labels/good%20first%20issue)
+
+### How to Contribute
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
 4. Add tests if applicable
-5. Submit a pull request
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines (coming soon).
+
+## Community & Support
+
+- **Project Board**: [Robin Engine Development](https://github.com/users/ringo380/projects/3)
+- **Issue Tracker**: [Report bugs or request features](https://github.com/ringo380/robin/issues)
+- **Roadmap**: [Development roadmap and timeline](/.github/ROADMAP.md)
+- **Milestones**: [Current sprint and goals](https://github.com/ringo380/robin/milestones)
 
 ## License
 
-Licensed under either of:
-- MIT license
-- Apache License, Version 2.0
+MIT License - see [LICENSE](LICENSE) for details.
 
-at your option.
+Copyright (c) 2025 Ryan Robson

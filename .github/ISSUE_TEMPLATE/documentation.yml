@@ -1,0 +1,152 @@
+name: Documentation
+description: Report documentation issues or suggest improvements
+title: "[Docs]: "
+labels: ["type:docs", "priority:low"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Robin Engine's documentation!
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What kind of documentation needs attention?
+      options:
+        - API Documentation (rustdoc)
+        - README / Getting Started
+        - Code Comments
+        - Tutorial / Guide
+        - Architecture Documentation
+        - Contributing Guidelines
+        - Issue Template
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - Missing Documentation
+        - Incorrect Information
+        - Unclear / Confusing
+        - Outdated
+        - Typo / Grammar
+        - Enhancement / Improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is the documentation that needs attention?
+      placeholder: |
+        File: src/engine/graphics/renderer.rs
+        Line: 142
+        Or: README.md, Section "Quick Start"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Documentation
+      description: Quote the current documentation (if applicable)
+      placeholder: |
+        Currently, the docs say:
+        ```
+        /// Renders the voxel world
+        ```
+      render: markdown
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's Wrong or Missing?
+      description: Explain the documentation issue
+      placeholder: |
+        The function documentation doesn't mention that it requires...
+        Or: There's no explanation of how to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be improved?
+      placeholder: |
+        The documentation should explain:
+        1. The parameters and their constraints
+        2. Example usage
+        3. Performance considerations
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Proposed Documentation
+      description: If applicable, provide the improved documentation text
+      placeholder: |
+        ```rust
+        /// Renders the voxel world with the specified camera.
+        ///
+        /// # Arguments
+        /// * `camera` - The camera used for rendering
+        /// * `chunks` - The voxel chunks to render
+        ///
+        /// # Examples
+        /// ```
+        /// renderer.render_world(&camera, &world.chunks)?;
+        /// ```
+        ///
+        /// # Performance
+        /// This function uses frustum culling to only render visible chunks.
+        ```
+      render: rust
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Documentation Area
+      description: Which part of the engine does this documentation cover?
+      options:
+        - Engine Core
+        - Graphics / Rendering
+        - Voxel System
+        - Build Mode
+        - Physics
+        - Multiplayer
+        - UI / UX
+        - Platform Integration
+        - Getting Started / Setup
+        - Contributing / Development
+        - General Project Documentation
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Would you like to contribute?
+      description: Would you be interested in submitting a PR to fix this?
+      options:
+        - label: I would like to submit a PR to fix this documentation issue
+          required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have checked that this documentation is still current (not outdated issue)
+          required: true

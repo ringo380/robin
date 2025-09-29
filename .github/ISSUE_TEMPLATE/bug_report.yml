@@ -1,0 +1,116 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Robin Engine
+title: "[Bug]: "
+labels: ["type:bug", "priority:medium"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this bug! Please fill out the information below to help us diagnose and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: When I do X, Y happens instead of Z...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      description: Which part of the engine is affected?
+      options:
+        - Engine Core
+        - Graphics / Rendering
+        - Voxel System
+        - Build Mode
+        - Physics
+        - Multiplayer
+        - UI / UX
+        - Platform Integration
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Launch robin_demo
+        2. Navigate to build mode
+        3. Select stone material
+        4. Place block at coordinates...
+        5. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+      placeholder: The block should be placed successfully without errors
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happens?
+      placeholder: The application crashes with error code 101
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please provide your system information
+      value: |
+        - **OS**: [e.g., macOS 14.5, Windows 11]
+        - **Rust Version**: [e.g., 1.70.0]
+        - **Robin Version**: [e.g., 0.2.0]
+        - **GPU**: [e.g., Apple M1, NVIDIA RTX 3080]
+        - **Build Mode**: [Debug / Release]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and Stack Trace
+      description: If applicable, paste any error messages, logs, or stack traces
+      placeholder: |
+        RUST_BACKTRACE=full cargo run --bin robin_test
+        ... error output here ...
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem
+      placeholder: Drag and drop images here
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm you have done the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have tested this on the latest version of Robin
+          required: false
+        - label: I can consistently reproduce this bug
+          required: false
+        - label: I have included all relevant information above
+          required: true

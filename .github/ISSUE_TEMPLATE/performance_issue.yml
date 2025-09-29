@@ -1,0 +1,142 @@
+name: Performance Issue
+description: Report performance problems or optimization opportunities
+title: "[Performance]: "
+labels: ["type:performance", "area:performance", "priority:high"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a performance issue! Detailed metrics help us optimize Robin Engine.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem you're experiencing
+      placeholder: When rendering large voxel worlds, the frame rate drops to...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected System
+      description: Which system is experiencing performance issues?
+      options:
+        - Rendering / Graphics
+        - Voxel Meshing
+        - Physics Simulation
+        - Chunk Streaming
+        - Network Sync
+        - Memory Usage
+        - CPU Usage
+        - GPU Usage
+        - General / Multiple Systems
+    validations:
+      required: true
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Performance Metrics
+      description: Provide measurable performance data
+      value: |
+        - **Frame Rate**: [e.g., 30 FPS, dropping to 15 FPS under load]
+        - **Frame Time**: [e.g., 33ms average, spikes to 100ms]
+        - **CPU Usage**: [e.g., 80% on single core]
+        - **GPU Usage**: [e.g., 95% utilization]
+        - **Memory Usage**: [e.g., 2.5GB RAM, growing over time]
+        - **Draw Calls**: [e.g., 5,000 per frame]
+        - **Vertices**: [e.g., 500,000 rendered]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Launch robin_demo
+        2. Load a world with 100x100 chunks
+        3. Enable all rendering features
+        4. Observe frame rate drop
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: System Environment
+      value: |
+        - **OS**: [e.g., macOS 14.5]
+        - **CPU**: [e.g., Apple M1 Max]
+        - **RAM**: [e.g., 32GB]
+        - **GPU**: [e.g., Apple M1 Max 32-core]
+        - **Rust Version**: [e.g., 1.70.0]
+        - **Robin Version**: [e.g., 0.2.0]
+        - **Build Mode**: [Debug / Release]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Data
+      description: If you have profiling data (flamegraph, perf, Instruments), please share
+      placeholder: |
+        Attach profiling screenshots or paste key findings:
+        - Function X takes 45% of frame time
+        - Memory allocation spike in module Y
+      render: shell
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Performance
+      description: What performance would you expect in this scenario?
+      placeholder: I would expect 60 FPS with this workload based on...
+    validations:
+      required: true
+
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: Workarounds
+      description: Have you found any workarounds or settings that improve performance?
+      placeholder: Disabling feature X improves FPS by...
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Is this a regression?
+      description: Did performance get worse in a recent version?
+      options:
+        - "Yes - it used to work better"
+        - "No - it has always been slow"
+        - "Unknown"
+    validations:
+      required: true
+
+  - type: textarea
+    id: comparison
+    attributes:
+      label: Performance Comparison
+      description: If this is a regression, which version had better performance?
+      placeholder: Version 0.1.0 achieved 60 FPS in the same scenario
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have tested this in Release mode (not Debug)
+          required: true
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have provided measurable performance data
+          required: true
+        - label: I have tested on the latest version of Robin
+          required: false
