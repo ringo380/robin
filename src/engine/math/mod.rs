@@ -2,7 +2,13 @@ pub mod transform;
 pub mod bounds;
 // Removed non-existent modules: vector, matrix
 
-pub use cgmath::*;
+// Import specific items from cgmath to avoid conflicts
+pub use cgmath::{
+    Vector2, Vector3, Vector4, Matrix4, Quaternion,
+    Rad, Deg, Zero, One, InnerSpace, EuclideanSpace, MetricSpace,
+    SquareMatrix, Basis2, Basis3, Rotation, Rotation2, Rotation3,
+    perspective, ortho, frustum,
+};
 pub use transform::*;
 pub use bounds::*;
 // Removed unused imports: vector::*, matrix::*

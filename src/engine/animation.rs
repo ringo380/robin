@@ -1,4 +1,4 @@
-use crate::engine::math::{Vec2, Vec3};
+use crate::engine::math::Vec2;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 

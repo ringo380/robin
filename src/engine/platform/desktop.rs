@@ -9,7 +9,7 @@
 use crate::engine::{
     error::{RobinError, RobinResult},
     graphics::GraphicsContext,
-    platform::{Platform, WindowConfig, WindowHandle, DisplayInfo},
+    platform::{Platform, WindowConfig, WindowHandle},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

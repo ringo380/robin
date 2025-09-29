@@ -1,6 +1,9 @@
 use crate::engine::math::{Vec3, Mat4};
 // Removed unused import: Vec2
 
+/// Type alias for backward compatibility
+pub type Transform = Transform3D;
+
 pub struct Transform3D {
     pub position: Vec3,
     pub rotation: Vec3,

@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{Key, NamedKey};
-use std::collections::HashMap;
 
 pub struct InputManager {
     keys: HashMap<Key, bool>,

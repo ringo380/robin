@@ -256,6 +256,7 @@ pub enum RobinError {
     InvalidResource(String),
     BufferError(String),
     InvalidInput(String),
+    InsufficientResources(String),
     Custom(String),
     OutOfMemory,
     GPUMemoryError(String),
@@ -275,6 +276,14 @@ pub enum RobinError {
     VRSystem(String),
     Story(String),
     AssistanceError(String),
+    Community(String),
+    IO(String),
+    Serialization(String),
+    NotFound(String),
+    AlreadyExists(String),
+    PermissionDenied(String),
+    Expired(String),
+    LimitExceeded(String),
     Other(String),
 }
 
@@ -522,6 +531,9 @@ impl fmt::Display for RobinError {
             RobinError::InvalidInput(reason) => {
                 write!(f, "Invalid input: {}", reason)
             }
+            RobinError::InsufficientResources(reason) => {
+                write!(f, "Insufficient resources: {}", reason)
+            }
             RobinError::Custom(reason) => {
                 write!(f, "Custom error: {}", reason)
             }
@@ -578,6 +590,30 @@ impl fmt::Display for RobinError {
             }
             RobinError::AssistanceError(reason) => {
                 write!(f, "AI assistance error: {}", reason)
+            }
+            RobinError::Community(reason) => {
+                write!(f, "Community error: {}", reason)
+            }
+            RobinError::IO(reason) => {
+                write!(f, "IO error: {}", reason)
+            }
+            RobinError::Serialization(reason) => {
+                write!(f, "Serialization error: {}", reason)
+            }
+            RobinError::NotFound(resource) => {
+                write!(f, "Resource not found: {}", resource)
+            }
+            RobinError::AlreadyExists(resource) => {
+                write!(f, "Resource already exists: {}", resource)
+            }
+            RobinError::PermissionDenied(action) => {
+                write!(f, "Permission denied: {}", action)
+            }
+            RobinError::Expired(resource) => {
+                write!(f, "Resource expired: {}", resource)
+            }
+            RobinError::LimitExceeded(limit) => {
+                write!(f, "Limit exceeded: {}", limit)
             }
             RobinError::Other(reason) => {
                 write!(f, "Other error: {}", reason)
@@ -754,6 +790,12 @@ impl From<std::num::ParseFloatError> for RobinError {
 impl From<glob::PatternError> for RobinError {
     fn from(error: glob::PatternError) -> Self {
         RobinError::InvalidInput(format!("Invalid glob pattern: {}", error))
+    }
+}
+
+impl From<Box<bincode::ErrorKind>> for RobinError {
+    fn from(error: Box<bincode::ErrorKind>) -> Self {
+        RobinError::Serialization(format!("Bincode serialization error: {}", error))
     }
 }
 

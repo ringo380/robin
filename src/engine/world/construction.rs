@@ -1,20 +1,22 @@
-use nalgebra::{Vector3, Point3, Matrix4};
+use cgmath::{Vector3, Point3, Matrix4, InnerSpace};
 use std::collections::HashMap;
 use super::building::BuildingSystem;
 
-// Temporarily disabled due to nalgebra math type issues:
+// TODO: Re-enable these modules after fixing:
+// - Convert all nalgebra types to cgmath types for consistency
+// - Fix ownership and borrowing issues in voxel_engine.rs
+// - Resolve type conversion issues between f32 and i32
 // pub mod voxel_engine;
 // pub mod placement_system;
 // pub mod terrain_modification;
 // pub mod blueprint_system;
 
-// Temporarily disabled exports:
 // pub use voxel_engine::VoxelEngine;
 // pub use placement_system::PlacementSystem;
 // pub use terrain_modification::TerrainModifier;
 // pub use blueprint_system::BlueprintSystem;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MaterialType {
     Wood,
     Stone,
@@ -1220,14 +1222,16 @@ impl FallingBlockSystem {
         let block_descriptor = BodyDescriptor {
             body_type: BodyType3D::Dynamic,
             position: world_pos,
+            rotation: cgmath::Quaternion::new(1.0, 0.0, 0.0, 0.0),
+            velocity: Vec3::new(0.0, 0.0, 0.0),
+            angular_velocity: Vec3::new(0.0, 0.0, 0.0),
             mass: voxel_type.density(),
             friction: 0.5,
             restitution: 0.1, // Small bounce
             linear_damping: 0.05,
             angular_damping: 0.8,
             gravity_scale: 1.0,
-            can_sleep: true,
-            lock_rotations: false,
+            is_sensor: false,
         };
 
         let block_shape = ColliderShape3D::voxel_block();

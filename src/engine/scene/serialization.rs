@@ -1,8 +1,8 @@
 use crate::engine::{
     math::{Vec2, Vec3},
-    scene::{Scene, GameObject, Transform},
+    scene::{Scene, Transform},
 };
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;

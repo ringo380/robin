@@ -2,9 +2,9 @@ use log::{Level, LevelFilter, Record};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Write, BufWriter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::SystemTime;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 

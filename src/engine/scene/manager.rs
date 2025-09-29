@@ -1,10 +1,8 @@
 use crate::engine::{
-    scene::{Scene, SerializableScene, SceneSerializer, SceneResult, SceneMetadata, GlobalSceneSettings},
-    assets::{AssetType, HotReloadEvent},
+    scene::{Scene, SceneSerializer, SceneResult, SceneMetadata, GlobalSceneSettings},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 /// Scene management system for loading, saving, and managing multiple scenes
 pub struct SceneManager {

@@ -7,7 +7,7 @@ use std::time::Instant;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RuntimeValue {
     Bool(bool),
     Int(i32),
