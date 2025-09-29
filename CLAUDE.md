@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Robin is a comprehensive 2D/3D voxel game engine built from scratch in Rust, featuring real-time 3D rendering, voxel terrain generation, and an Engineer Build Mode system for in-game world creation. The project has evolved from scattered demos into a unified, professional engine architecture.
+**Robin is a 3D voxel game engine** - built from scratch in Rust for innovative building and crafting gameplay. The engine features real-time 3D rendering, voxel terrain generation, and an Engineer Build Mode system for creative world construction. This is a **game engine first** - designed for players who enjoy construction, logic, and crafting mechanics.
+
+**IMPORTANT**: Robin is NOT an educational platform. Any educational value emerges naturally from engaging gameplay mechanics, not from deliberate educational design. Focus on the game engine capabilities and innovative voxel construction systems.
 
 ## Critical User Requirements
 
@@ -101,7 +103,7 @@ env CARGO_INCREMENTAL=0 RUSTFLAGS="-C opt-level=0" timeout 30s cargo check --lib
    - **Engineer Build Mode**: Real-time world construction with advanced tools
    - **Interactive Particle Effects**: Physics-based particles for block placement/removal
    - **AI-Assisted Development**: Procedural generation and intelligent assistance
-   - **Research Integration**: Educational partnership capabilities and study frameworks
+   - **Advanced Game Systems**: NPC intelligence, story systems, and dynamic world generation
 
 ### Key Dependencies (Updated)
 - **wgpu 0.20**: WebGPU graphics API for all 3D rendering
@@ -181,9 +183,9 @@ archive/demos/               # Historical demo preservation
 
 **Phase 4**: Production Ready 🔄 **CURRENT**
 - Final UI polish and modern interface systems
-- Educational partnership integrations
-- Research framework for longitudinal studies
-- Ecosystem marketplace preparation
+- Advanced gameplay mechanics and player progression
+- Multiplayer systems and collaborative building
+- Platform deployment and distribution
 
 ## Demo Consolidation Achievement ✅
 
@@ -202,7 +204,7 @@ archive/demos/               # Historical demo preservation
 - ✅ AI systems with ML-powered content generation
 - ✅ Performance systems with GPU acceleration and optimization
 - ✅ Platform abstraction for multiple deployment targets
-- ✅ Research integration for educational partnerships
+- ✅ Advanced game systems for immersive gameplay
 
 ## Graphics Requirements
 

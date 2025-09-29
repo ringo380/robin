@@ -1,0 +1,32 @@
+[graphics]
+vsync_enabled = true
+target_fps = 120
+render_distance = 8
+shadow_quality = 2
+texture_quality = 2
+anti_aliasing = true
+max_background_voxels = 10000
+
+[audio]
+master_volume = 1.0
+sfx_volume = 0.800000011920929
+music_volume = 0.6000000238418579
+spatial_audio = true
+
+[controls]
+mouse_sensitivity = 0.0020000000949949026
+invert_y_axis = false
+camera_speed = 5.0
+mouse_smoothing = true
+
+[display]
+fullscreen = false
+window_width = 1920
+window_height = 1080
+borderless = false
+
+[debug]
+show_performance_metrics = false
+show_wireframes = false
+verbose_logging = false
+show_buffer_stats = false
