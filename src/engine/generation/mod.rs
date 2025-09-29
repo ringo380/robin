@@ -60,6 +60,16 @@ pub mod noise;
 pub mod destruction;
 pub mod ui_generation;
 pub mod runtime_tools;
+pub mod ml_generator;
+pub mod algorithmic_generator;
+pub mod contextual_generator;
+pub mod multi_scale_generator;
+pub mod content_quality_assessor;
+pub mod dynamic_adaptation;
+pub mod composition_engine;
+pub mod performance_optimization;
+pub mod system_integration;
+pub mod enhanced_procedural;
 
 // Import specific types to avoid ambiguity
 pub use voxel_system::{
@@ -90,6 +100,61 @@ pub use ui_generation::{
 };
 pub use runtime_tools::{
     RuntimeGenerationTools, RuntimeToolsConfig, RuntimeTools
+};
+pub use ml_generator::{
+    MachineLearningGenerator, MLGeneratorConfig, MLCharacterEnhancements,
+    MLEnvironmentDistribution, MLObjectOptimization
+};
+pub use algorithmic_generator::{
+    AlgorithmicGenerators, AlgorithmicConfig, EnhancedTerrain, VegetationDistribution,
+    WildlifeDistribution, GeologicalFeatures, ClimateEffects, BiomeFeatures,
+    AlgorithmicObjectDetails, SurfacePatterns, AlgorithmPerformanceStats
+};
+pub use contextual_generator::{
+    ContextualGenerator, ContextualConfig, ContextualCharacterDetails,
+    ContextualEnvironmentFeatures
+};
+pub use multi_scale_generator::{
+    MultiScaleGenerator, MultiScaleConfig, MultiScaleCharacterDetails,
+    MultiScaleTextures
+};
+pub use content_quality_assessor::{
+    ContentQualityAssessor, AestheticAnalyzer, PerformanceAnalyzer, FunctionalAnalyzer,
+    CoherenceAnalyzer, InnovationAnalyzer, QualityMonitor, QualityFactors,
+    QualityFactorData, ImprovementSuggestion, ContentType, QualityTrends
+};
+pub use dynamic_adaptation::{
+    DynamicContentAdaptationEngine, PlayerBehaviorAnalyzer, PlayerState, GameContext,
+    EnvironmentalContext, BehaviorProfile, AdaptedContent, AdaptedEnvironment,
+    AdaptationInstructions, AdaptationInsights, PlayerFeedback, EnvironmentalPreferences,
+    BehaviorPatterns, ActivityCycle, PreferenceEvolution, DifficultyAdjustment,
+    LearnedPreferences, DifficultyTrends, EffectivenessMetrics,
+    AestheticAdaptationInstruction, BehavioralAdaptationInstruction,
+    FunctionalAdaptationInstruction, DifficultyAdaptationInstruction,
+    AestheticAdaptation, BehavioralAdaptation, FunctionalAdaptation,
+    DifficultyAdaptation, BiomeAdaptation, WeatherAdaptation, ResourceAdaptation
+};
+pub use enhanced_procedural::{
+    EnhancedProceduralEngine, EnhancedGenerationConfig, EnhancedGeneratedCharacter,
+    EnhancedGeneratedEnvironment, EnhancedGeneratedObject, EnhancedGeneratedSurface,
+    TemplateGenerationParams, TemplateGeneratedContent, EnhancedMaterial,
+    GenerationMetadata, TerrainMaterial, EnhancedGenerationStats, TemplateUsageStats,
+    GenerationMetrics
+};
+pub use composition_engine::{
+    AdvancedContentCompositionEngine, LayerManager, CompositionPipeline,
+    HierarchicalComposer, LayerBlendingEngine, CompositionOptimizer,
+    CompositionAnalytics, LayeredCompositionRequest, ContentElement,
+    ContentElementType, ContentLayer, LayerType, BlendMode, ComposedContent,
+    CompositionMetadata, BlendingConfig, QualityLevel, DetailElement,
+    DetailType, OverlayElement, OverlayType, HierarchicalNode,
+    CompositionStage, StageType, StageConfig, PipelineInput, PipelineOutput,
+    CachedPipelineResult, CompositionRule, RuleType, RuleCondition,
+    OptimizationLevel, OptimizationStrategy, StrategyType, OptimizationConfig,
+    PerformanceTracker, PerformanceMetrics, BlendProcessor, BlendedComposition,
+    BlendMetadata, CompositionPerformanceMetrics, CompositionPipelineConfig,
+    CompositionRecord, CompositionAnalyticsSummary, MaterialInfo,
+    MaterialInteractionPattern, InteractionLayer, InteractionType
 };
 
 /// Core procedural generation engine
@@ -833,6 +898,74 @@ pub struct CharacterParams {
     pub hair_color: String,
     pub clothing: Vec<String>,
     pub color_scheme: Vec<(String, Color)>, // Color scheme for variants
+}
+
+// Enhanced parameter types for procedural generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedCharacterParams {
+    pub style: GenerationStyle,
+    pub detail_level: DetailLevel,
+    pub character_type: String,
+    pub customization: HashMap<String, String>,
+    pub generate_animations: bool,
+    pub scale: f32,
+    pub primary_color: String,
+    pub has_hair: bool,
+    pub hair_color: String,
+    pub clothing: Vec<String>,
+    pub color_scheme: Vec<(String, Color)>,
+    // Enhanced parameters
+    pub use_ml_enhancement: bool,
+    pub context_hints: Vec<String>,
+    pub personality_traits: Vec<String>,
+    pub skill_specializations: Vec<String>,
+    pub equipment_preferences: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedEnvironmentParams {
+    pub style: GenerationStyle,
+    pub detail_level: DetailLevel,
+    pub environment_type: EnvironmentType,
+    pub terrain_type: TerrainType,
+    pub climate: String,
+    pub density: f32,
+    pub dimensions: Vec3,
+    pub vegetation_density: f32,
+    // Enhanced parameters
+    pub use_ml_distribution: bool,
+    pub biome_complexity: f32,
+    pub geological_features: Vec<String>,
+    pub weather_patterns: Vec<String>,
+    pub ecosystem_interactions: bool,
+    pub seasonal_variation: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedObjectParams {
+    pub template_id: Option<String>,
+    pub object_type: String,
+    pub position: Vec3,
+    pub scale: f32,
+    pub advanced_material_type: crate::engine::world::AdvancedMaterialType,
+    pub material_properties: crate::engine::world::AdvancedMaterialProperties,
+    pub use_ml_optimization: bool,
+    pub context_hints: Vec<String>,
+    pub quality_preference: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedSurfaceParams {
+    pub technique: SurfaceGeneration,
+    pub surface_type: SurfaceType,
+    pub resolution: u32,
+    pub base_material_properties: MaterialProperties,
+    // Enhanced parameters
+    pub advanced_material_type: crate::engine::world::AdvancedMaterialType,
+    pub material_properties: crate::engine::world::AdvancedMaterialProperties,
+    pub enable_weathering: bool,
+    pub multi_scale_detail: bool,
+    pub procedural_patterns: Vec<String>,
 }
 
 impl CharacterParams {

@@ -1,21 +1,17 @@
 [package]
 name = "robin"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A unified 2D/3D game engine optimized for macOS"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [[bin]]
 name = "robin"
 path = "src/bin/robin.rs"
 
 [[bin]]
-name = "minimal_test"
-path = "minimal_test.rs"
-
-[[bin]]
-name = "working_interactive_demo"
-path = "working_interactive_demo.rs"
+name = "robin_test"
+path = "robin_test.rs"
 
 [dependencies]
 winit = "0.29"
@@ -107,17 +103,6 @@ imgui-support = ["imgui"]
 criterion = "0.5"
 tempfile = "3.0"
 
-[[bin]]
-name = "phase4_ui_polish_demo"
-path = "phase4_ui_polish_demo.rs"
-
-[[bin]]
-name = "phase4_standalone_demo"
-path = "phase4_standalone_demo.rs"
-
-[[bin]]
-name = "simple_wgpu_demo"
-path = "simple_wgpu_demo.rs"
 
 [[example]]
 name = "hot_reload_demo"
@@ -147,21 +132,6 @@ path = "examples/robin_3d_showcase.rs"
 name = "simple_3d_demo"
 path = "examples/simple_3d_demo.rs"
 
-[[example]]
-name = "real_3d_window"
-path = "real_3d_window.rs"
-
-[[example]]
-name = "interactive_3d_demo"
-path = "interactive_3d_demo.rs"
-
-[[example]]
-name = "voxel_world_demo"
-path = "voxel_world_demo.rs"
-
-[[example]]
-name = "robin_voxel_demo"
-path = "robin_voxel_demo.rs"
 
 [[example]]
 name = "minimal_triangle"
