@@ -12,7 +12,6 @@ use crate::engine::{
 use super::{DeviceCapabilities, GPUTextureHandle, TextureDescriptor};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, BTreeSet, VecDeque};
-use std::sync::Arc;
 
 /// GPU memory manager for textures, buffers, and other resources
 #[derive(Debug)]
@@ -967,6 +966,9 @@ fn align_up(value: usize, alignment: usize) -> usize {
 mod tests {
     use super::*;
     use crate::engine::graphics::MockGraphicsContext;
+    use crate::engine::gpu::buffers::TextureFormat;
+    use crate::gpu::TextureUsage;
+    use crate::engine::gpu::buffers::MemoryType;
 
     #[test]
     fn test_memory_heap_creation() {
@@ -1035,7 +1037,11 @@ mod tests {
 
     #[test]
     fn test_texture_memory_size_calculation() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let device_caps = DeviceCapabilities::query(&graphics_context).unwrap();
         let config = GPUMemoryConfig::default();
         let manager = GPUMemoryManager::new(&graphics_context, &device_caps, config).unwrap();
@@ -1044,9 +1050,9 @@ mod tests {
             width: 256,
             height: 256,
             depth: 1,
-            format: super::TextureFormat::RGBA8,
-            usage: super::TextureUsage::Sampled,
-            memory_type: super::MemoryType::DeviceLocal,
+            format: TextureFormat::RGBA8,
+            usage: TextureUsage::Sampled,
+            memory_type: MemoryType::DeviceLocal,
         };
         
         let size = manager.calculate_texture_memory_size(&desc);

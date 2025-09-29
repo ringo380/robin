@@ -6,11 +6,10 @@
  */
 
 use crate::engine::{
-    graphics::{GraphicsContext, Texture},
+    graphics::GraphicsContext,
     error::{RobinError, RobinResult},
 };
-use wgpu::Buffer;
-use super::{DeviceCapabilities, GPUBufferHandle, GPUTextureHandle, ShaderCache};
+use super::{DeviceCapabilities, GPUBufferHandle, GPUTextureHandle};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -508,19 +507,28 @@ mod tests {
 
     #[test]
     fn test_compute_manager_creation() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let device_caps = DeviceCapabilities::query(&graphics_context).unwrap();
         let manager = ComputeManager::new(&graphics_context, &device_caps);
-        
+
         assert!(manager.is_ok());
     }
 
     #[test]
     fn test_work_group_optimizer() {
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let device_caps = DeviceCapabilities {
             max_compute_work_group_size: (1024, 1024, 64),
             max_compute_work_group_invocations: 1024,
-            ..DeviceCapabilities::query(&MockGraphicsContext::new()).unwrap()
+            ..DeviceCapabilities::query(&graphics_context).unwrap()
         };
         
         let mut optimizer = WorkGroupOptimizer::new(&device_caps);
@@ -536,7 +544,11 @@ mod tests {
 
     #[test]
     fn test_dispatch_validation() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let device_caps = DeviceCapabilities::query(&graphics_context).unwrap();
         let manager = ComputeManager::new(&graphics_context, &device_caps).unwrap();
         

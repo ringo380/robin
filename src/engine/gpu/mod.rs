@@ -6,10 +6,9 @@
  */
 
 use crate::engine::{
-    graphics::{GraphicsContext, Texture},
+    graphics::GraphicsContext,
     error::{RobinError, RobinResult},
 };
-use wgpu::Buffer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -458,7 +457,11 @@ mod tests {
 
     #[test]
     fn test_device_capabilities_query() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let caps = DeviceCapabilities::query(&graphics_context);
         
         assert!(caps.is_ok());
@@ -469,7 +472,11 @@ mod tests {
 
     #[test]
     fn test_device_requirements_check() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let caps = DeviceCapabilities::query(&graphics_context).unwrap();
         let requirements = DeviceRequirements::default();
         

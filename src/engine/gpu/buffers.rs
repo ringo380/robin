@@ -11,7 +11,6 @@ use crate::engine::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 
 /// GPU buffer handle for safe resource access
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

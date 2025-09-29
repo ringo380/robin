@@ -7,12 +7,11 @@
 
 use crate::engine::{
     graphics::GraphicsContext,
-    error::{RobinError, RobinResult},
+    error::RobinResult,
     math::Vec3,
     generation::{
         GenerationEngine, GenerationConfig,
-        NoiseSystem, VoxelSystem, PixelScatterSystem,
-        DestructionSystem, RuntimeTools,
+        NoiseSystem, VoxelSystem,
         SurfaceParams,
         noise::{TerrainParams, NoiseType},
         voxel_system::{VoxelWorld},
@@ -947,7 +946,11 @@ mod tests {
 
     #[test]
     fn test_gpu_generation_engine_creation() {
-        let graphics_context = MockGraphicsContext::new();
+        let mock_context = MockGraphicsContext::new();
+        let graphics_context = GraphicsContext {
+            device_info: mock_context.device_info.clone(),
+            capabilities: mock_context.capabilities.clone(),
+        };
         let config = GPUGenerationConfig::default();
         let engine = GPUGenerationEngine::new(&graphics_context, config);
         
