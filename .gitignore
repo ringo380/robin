@@ -1,8 +1,77 @@
-/target
+# Robin Engine - Comprehensive .gitignore
 
-# Build artifacts
+# Rust Build Artifacts
 /target/
+**/target/
+**/*.rlib
+**/*.rmeta
+**/*.d
+**/*.pdb
+Cargo.lock
+**/*.rs.bk
+
+# Specific Robin Engine Directories
+robin_demo/target/
+standalone_demo/target/
+quick_3d_demo/target/
 voxel_demo/target/
-*.rlib
-*.rmeta
-*.d
+**/examples/target/
+
+# Robin Engine State and Runtime Files
+**/state/
+**/logs/
+**/*.log
+**/saves/
+**/cache/
+**/*.tmp
+
+# IDE and Editors
+.DS_Store
+.DS_Store?
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+\#*\#
+.#*
+
+# Cargo and Rust
+.cargo/
+**/*.rs.bk
+rust-project.json
+
+# Graphics and Asset Cache
+**/*.cache
+**/shaders/compiled/
+**/assets/temp/
+**/gpu_cache/
+
+# OS Specific
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.lnk
+
+# Development Tools
+.env
+.env.local
+*.local
+
+# Documentation Generated
+book/
+docs/generated/
+
+# Performance and Profiling
+*.prof
+*.perfdata
+flamegraph.svg
+**/*.profdata
+
+# Platform Specific Builds
+**/x86_64-*
+**/aarch64-*
+**/wasm32-*
+
