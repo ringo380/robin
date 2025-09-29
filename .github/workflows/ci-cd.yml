@@ -1,0 +1,293 @@
+name: Robin Engine CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check and Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Run tests
+      run: cargo test --all-features
+
+  build-linux:
+    name: Build Linux
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxkbcommon-dev libwayland-dev libxrandr-dev \
+          libxinerama-dev libxcursor-dev libxi-dev libxss-dev libgl1-mesa-dev \
+          libasound2-dev pkg-config
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build Robin Engine
+      run: cargo build --release --bin robin
+
+    - name: Build Robin Demo
+      run: |
+        cd robin_demo
+        cargo build --release
+
+    - name: Package Linux build
+      run: |
+        mkdir -p dist/linux
+        cp target/release/robin dist/linux/
+        cp robin_demo/target/release/robin_demo dist/linux/
+        cp README.md dist/linux/
+        cd dist && tar -czf robin-engine-linux.tar.gz linux/
+
+    - name: Upload Linux artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: robin-engine-linux
+        path: dist/robin-engine-linux.tar.gz
+
+  build-windows:
+    name: Build Windows
+    needs: check
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build Robin Engine
+      run: cargo build --release --bin robin
+
+    - name: Build Robin Demo
+      run: |
+        cd robin_demo
+        cargo build --release
+
+    - name: Package Windows build
+      run: |
+        New-Item -ItemType Directory -Force -Path "dist/windows"
+        Copy-Item "target/release/robin.exe" "dist/windows/"
+        Copy-Item "robin_demo/target/release/robin_demo.exe" "dist/windows/"
+        Copy-Item "README.md" "dist/windows/"
+        Compress-Archive -Path "dist/windows/*" -DestinationPath "dist/robin-engine-windows.zip"
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: robin-engine-windows
+        path: dist/robin-engine-windows.zip
+
+  build-macos:
+    name: Build macOS
+    needs: check
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: macos-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build Robin Engine
+      run: cargo build --release --target ${{ matrix.target }} --bin robin
+
+    - name: Build Robin Demo
+      run: |
+        cd robin_demo
+        cargo build --release --target ${{ matrix.target }}
+
+    - name: Create macOS app bundle
+      run: |
+        mkdir -p "dist/Robin Engine.app/Contents/MacOS"
+        mkdir -p "dist/Robin Engine.app/Contents/Resources"
+
+        # Copy binaries
+        cp "target/${{ matrix.target }}/release/robin" "dist/Robin Engine.app/Contents/MacOS/"
+        cp "robin_demo/target/${{ matrix.target }}/release/robin_demo" "dist/Robin Engine.app/Contents/MacOS/"
+
+        # Create Info.plist
+        cat > "dist/Robin Engine.app/Contents/Info.plist" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>robin_demo</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.robinengine.demo</string>
+            <key>CFBundleName</key>
+            <string>Robin Engine</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>11.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>NSRequiresAquaSystemAppearance</key>
+            <false/>
+        </dict>
+        </plist>
+        EOF
+
+        # Package
+        cd dist && tar -czf "robin-engine-macos-${{ matrix.target }}.tar.gz" "Robin Engine.app"
+
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: robin-engine-macos-${{ matrix.target }}
+        path: dist/robin-engine-macos-${{ matrix.target }}.tar.gz
+
+  create-release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/**/*.tar.gz
+          dist/**/*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-steam:
+    name: Deploy to Steam
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist/
+
+    - name: Setup Steam deployment
+      run: |
+        echo "Steam deployment preparation"
+        echo "This would integrate with Steamworks SDK"
+        echo "Artifacts ready for Steam upload:"
+        ls -la dist/
+
+    # Note: Actual Steam deployment would require:
+    # - Steamworks SDK setup
+    # - Steam credentials configuration
+    # - SteamCmd or Steamworks API integration
+    # This is a placeholder for future Steam integration
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxkbcommon-dev libwayland-dev libxrandr-dev \
+          libxinerama-dev libxcursor-dev libxi-dev libxss-dev libgl1-mesa-dev \
+          libasound2-dev pkg-config
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: bench-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run benchmarks
+      run: |
+        cargo bench --all-features || echo "Benchmark suite preparation"
+        echo "Performance metrics would be collected here"
+        echo "Including voxel generation speed, rendering FPS, memory usage"

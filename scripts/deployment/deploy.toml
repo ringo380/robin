@@ -1,0 +1,188 @@
+# Robin Engine Deployment Configuration
+# Centralized configuration for all deployment targets
+
+[project]
+name = "robin-engine"
+version = "1.0.0"
+description = "3D Voxel Game Engine with Engineer Build Mode"
+author = "Robin Engine Team"
+homepage = "https://github.com/your-org/robin"
+repository = "https://github.com/your-org/robin"
+
+[build]
+# Default build configuration
+release_mode = true
+strip_symbols = true
+optimize_size = false
+
+# Target platforms
+[platforms.linux]
+enabled = true
+target = "x86_64-unknown-linux-gnu"
+features = ["default"]
+additional_flags = []
+
+[platforms.windows]
+enabled = true
+target = "x86_64-pc-windows-gnu"
+features = ["default"]
+additional_flags = []
+cross_compile = true
+mingw_required = true
+
+[platforms.macos_arm64]
+enabled = true
+target = "aarch64-apple-darwin"
+features = ["default", "metal"]
+additional_flags = ["-C", "target-cpu=apple-m1"]
+
+[platforms.macos_x86]
+enabled = true
+target = "x86_64-apple-darwin"
+features = ["default", "metal"]
+additional_flags = ["-C", "target-cpu=native"]
+
+# Distribution packaging
+[packaging]
+create_archives = true
+include_readme = true
+include_license = true
+include_assets = false  # Game assets to be determined
+
+[packaging.files]
+include = [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+]
+exclude = [
+    "target/",
+    ".git/",
+    "*.log",
+    "*.tmp"
+]
+
+# Steam deployment configuration
+[steam]
+app_id = "YOUR_STEAM_APP_ID"  # Replace with actual Steam App ID
+username = ""  # Set via environment variable
+build_description = "Robin Engine - Automated Build"
+
+[steam.depots]
+linux = "01"      # Steam depot suffix for Linux
+windows = "02"    # Steam depot suffix for Windows
+macos = "03"      # Steam depot suffix for macOS
+
+[steam.content]
+executable_name = "robin_demo"
+include_engine_binary = true
+content_root = "steam_build/content"
+
+# GitHub Actions configuration
+[github]
+enable_ci = true
+enable_release = true
+artifact_retention_days = 30
+
+[github.triggers]
+branches = ["main", "develop"]
+tags = ["v*"]
+pull_requests = ["main"]
+
+# Itch.io deployment configuration
+[itch]
+enabled = false
+username = "your-itch-username"
+game = "robin-engine"
+channel_linux = "linux"
+channel_windows = "windows"
+channel_macos = "macos"
+
+# Performance and optimization settings
+[optimization]
+enable_lto = true                    # Link-time optimization
+enable_panic_abort = true           # Panic = abort for smaller binaries
+enable_debug_assertions = false     # Disable debug assertions in release
+enable_overflow_checks = false      # Disable overflow checks in release
+
+[optimization.profile]
+opt_level = 3
+codegen_units = 1
+debug = false
+debug_assertions = false
+overflow_checks = false
+lto = true
+panic = "abort"
+
+# Testing configuration
+[testing]
+run_tests_before_build = true
+run_benchmarks = false
+test_timeout_seconds = 300
+
+# Asset pipeline configuration
+[assets]
+enable_compression = true
+texture_format = "auto"  # auto, png, ktx2
+audio_format = "ogg"     # ogg, mp3, wav
+model_format = "gltf"    # gltf, obj
+
+# Deployment hooks
+[hooks]
+pre_build = []           # Commands to run before building
+post_build = []          # Commands to run after building
+pre_deploy = []          # Commands to run before deployment
+post_deploy = []         # Commands to run after deployment
+
+# Platform-specific configurations
+[platform_specific]
+
+[platform_specific.linux]
+package_format = "tar.gz"
+desktop_file = true
+icon_sizes = [16, 32, 48, 64, 128, 256]
+
+[platform_specific.windows]
+package_format = "zip"
+create_installer = false  # Future: NSIS or WiX installer
+sign_executable = false   # Future: code signing
+
+[platform_specific.macos]
+package_format = "tar.gz"
+create_app_bundle = true
+bundle_id = "com.robinengine.demo"
+min_os_version = "11.0"
+sign_app = false          # Future: Apple code signing
+notarize = false          # Future: Apple notarization
+
+# Monitoring and analytics
+[monitoring]
+enable_crash_reporting = false  # Future: crash reporting service
+enable_analytics = false        # Future: usage analytics
+enable_telemetry = false        # Future: performance telemetry
+
+# Quality assurance
+[qa]
+run_static_analysis = true      # Clippy
+check_formatting = true         # rustfmt
+run_security_audit = false     # cargo audit
+check_dependencies = false     # cargo outdated
+
+# Documentation
+[documentation]
+generate_docs = false           # cargo doc
+include_in_package = false
+api_docs_url = ""
+
+# Localization
+[localization]
+enabled = false
+default_language = "en"
+supported_languages = ["en"]
+translation_format = "json"
+
+# Development tools
+[dev_tools]
+enable_profiling = false        # Enable profiling builds
+enable_debug_ui = false         # Enable debug UI in builds
+enable_console = false          # Enable debug console
