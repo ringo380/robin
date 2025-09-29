@@ -151,6 +151,7 @@ impl LODLevel {
     }
 }
 
+#[derive(Debug)]
 struct Chunk {
     position: (i32, i32, i32), // Chunk coordinates
     voxels: HashMap<(u8, u8, u8), VoxelType>, // Local coordinates (0-31)
@@ -810,6 +811,8 @@ struct RobinApp {
     ui_pipeline: wgpu::RenderPipeline,
     ui_vertex_buffer: Option<wgpu::Buffer>,
     ui_index_buffer: Option<wgpu::Buffer>,
+    // Particle Rendering
+    particle_vertex_buffer: Option<wgpu::Buffer>,
     // Engine systems
     camera: Camera,
     input_manager: InputManager,
@@ -839,6 +842,8 @@ struct RobinApp {
     undo_system: UndoRedoSystem,
     // UI Overlay system
     ui_overlay: UIOverlay,
+    // Help overlay system
+    help_overlay: robin::engine::ui::HelpOverlay,
     // Particle system for block interactions
     particle_system: ParticleSystem,
 }
@@ -993,7 +998,7 @@ impl UIOverlay {
                 "WASD: Move camera",
                 "Mouse: Look around",
                 "1-9: Select material",
-                "M: Cycle build mode",
+                "M/E: Cycle build mode",
                 "T: Cycle template",
                 "R: Rotate template",
                 "Ctrl+Z: Undo",
@@ -1110,6 +1115,232 @@ impl UIOverlay {
             BuildModeState::Build => "Build",
             BuildModeState::Test => "Test",
             BuildModeState::Play => "Play",
+        }
+    }
+
+    fn get_mode_color(mode: robin::engine::build_mode::BuildModeState) -> [f32; 3] {
+        use robin::engine::build_mode::BuildModeState;
+        match mode {
+            BuildModeState::Build => [0.2, 1.0, 0.3],  // Bright green for building
+            BuildModeState::Test => [1.0, 0.8, 0.2],   // Orange for testing
+            BuildModeState::Play => [0.3, 0.7, 1.0],   // Blue for playing
+        }
+    }
+
+    fn get_mode_status(mode: robin::engine::build_mode::BuildModeState) -> &'static str {
+        use robin::engine::build_mode::BuildModeState;
+        match mode {
+            BuildModeState::Build => "Ready to construct",
+            BuildModeState::Test => "Testing environment",
+            BuildModeState::Play => "Interactive mode",
+        }
+    }
+
+    fn update_ui_elements_extracted(&mut self,
+                                  current_mode: robin::engine::build_mode::BuildModeState,
+                                  current_material: VoxelType,
+                                  template_info: Option<(String, u32)>,
+                                  can_undo: bool,
+                                  can_redo: bool,
+                                  help_overlay: &robin::engine::ui::HelpOverlay) {
+        self.ui_elements.clear();
+
+        if !self.enabled {
+            return;
+        }
+
+        let mut y_offset = 20.0;
+        let line_height = 25.0;
+
+        // Enhanced Visual Mode HUD
+        let mode_name = Self::get_mode_name(current_mode);
+        let mode_color = Self::get_mode_color(current_mode);
+        let mode_status = Self::get_mode_status(current_mode);
+
+        // Mode header with visual indicator
+        self.ui_elements.push(UIElement {
+            text: "=== CURRENT MODE ===".to_string(),
+            position: (20.0, y_offset),
+            color: [0.8, 0.9, 1.0],
+            size: 14.0,
+        });
+        y_offset += 20.0;
+
+        // Large mode name with distinctive color
+        self.ui_elements.push(UIElement {
+            text: format!("▶ {} MODE", mode_name.to_uppercase()),
+            position: (20.0, y_offset),
+            color: mode_color,
+            size: 20.0,
+        });
+        y_offset += 25.0;
+
+        // Mode status description
+        self.ui_elements.push(UIElement {
+            text: format!("Status: {}", mode_status),
+            position: (20.0, y_offset),
+            color: [0.9, 0.9, 0.7],
+            size: 14.0,
+        });
+        y_offset += line_height;
+
+        // Enhanced Material info
+        y_offset += 10.0; // Add some spacing
+        self.ui_elements.push(UIElement {
+            text: "=== ACTIVE MATERIAL ===".to_string(),
+            position: (20.0, y_offset),
+            color: [0.8, 0.9, 1.0],
+            size: 14.0,
+        });
+        y_offset += 20.0;
+
+        self.ui_elements.push(UIElement {
+            text: format!("◉ {}", Self::get_material_name(current_material).to_uppercase()),
+            position: (20.0, y_offset),
+            color: Self::get_material_color(current_material),
+            size: 18.0,
+        });
+        y_offset += line_height;
+
+        // Enhanced Template info if available
+        if let Some((template_name, rotation)) = template_info {
+            y_offset += 10.0;
+            self.ui_elements.push(UIElement {
+                text: "=== ACTIVE TEMPLATE ===".to_string(),
+                position: (20.0, y_offset),
+                color: [0.8, 0.9, 1.0],
+                size: 14.0,
+            });
+            y_offset += 20.0;
+
+            self.ui_elements.push(UIElement {
+                text: format!("⚙ {} ({}°)", template_name.to_uppercase(), rotation * 90),
+                position: (20.0, y_offset),
+                color: [1.0, 1.0, 0.5],
+                size: 18.0,
+            });
+            y_offset += line_height;
+        }
+
+        // Enhanced FPS counter with performance indicator
+        y_offset += 10.0;
+        let fps_color = if self.current_fps >= 60.0 {
+            [0.2, 1.0, 0.3]  // Green for good performance
+        } else if self.current_fps >= 30.0 {
+            [1.0, 0.8, 0.2]  // Orange for okay performance
+        } else {
+            [1.0, 0.3, 0.2]  // Red for poor performance
+        };
+
+        self.ui_elements.push(UIElement {
+            text: "=== PERFORMANCE ===".to_string(),
+            position: (20.0, y_offset),
+            color: [0.8, 0.9, 1.0],
+            size: 14.0,
+        });
+        y_offset += 20.0;
+
+        self.ui_elements.push(UIElement {
+            text: format!("⚡ {:.1} FPS", self.current_fps),
+            position: (20.0, y_offset),
+            color: fps_color,
+            size: 18.0,
+        });
+        y_offset += line_height;
+
+        // Enhanced Undo/Redo status with visual indicators
+        y_offset += 10.0;
+        self.ui_elements.push(UIElement {
+            text: "=== HISTORY CONTROLS ===".to_string(),
+            position: (20.0, y_offset),
+            color: [0.8, 0.9, 1.0],
+            size: 14.0,
+        });
+        y_offset += 20.0;
+
+        let undo_indicator = if can_undo { "✓ UNDO AVAILABLE" } else { "✗ No undo" };
+        let undo_color = if can_undo { [0.2, 1.0, 0.3] } else { [0.5, 0.5, 0.5] };
+
+        self.ui_elements.push(UIElement {
+            text: undo_indicator.to_string(),
+            position: (20.0, y_offset),
+            color: undo_color,
+            size: 15.0,
+        });
+        y_offset += 20.0;
+
+        let redo_indicator = if can_redo { "✓ REDO AVAILABLE" } else { "✗ No redo" };
+        let redo_color = if can_redo { [0.2, 1.0, 0.3] } else { [0.5, 0.5, 0.5] };
+
+        self.ui_elements.push(UIElement {
+            text: redo_indicator.to_string(),
+            position: (20.0, y_offset),
+            color: redo_color,
+            size: 15.0,
+        });
+        y_offset += line_height;
+
+        // Help overlay content if visible
+        if help_overlay.is_visible() {
+            y_offset += 20.0;
+            let help_texts = help_overlay.get_help_text();
+            let alpha = help_overlay.get_animation_alpha();
+
+            for help_text in help_texts {
+                let color = if help_text.starts_with("===") {
+                    [1.0 * alpha, 1.0 * alpha, 0.8 * alpha]  // Header color
+                } else if help_text.starts_with("[") {
+                    [0.8 * alpha, 1.0 * alpha, 1.0 * alpha]  // Section header color
+                } else if help_text.is_empty() {
+                    continue;  // Skip empty lines
+                } else {
+                    [0.9 * alpha, 0.9 * alpha, 0.5 * alpha]  // Regular text color
+                };
+
+                let size = if help_text.starts_with("===") {
+                    16.0  // Header size
+                } else if help_text.starts_with("[") {
+                    15.0  // Section header size
+                } else {
+                    14.0  // Regular text size
+                };
+
+                self.ui_elements.push(UIElement {
+                    text: help_text,
+                    position: (20.0, y_offset),
+                    color,
+                    size,
+                });
+                y_offset += 20.0;
+            }
+        }
+
+        // Legacy help text if enabled (fallback)
+        if self.show_help && !help_overlay.is_visible() {
+            y_offset += 20.0;
+            let help_texts = vec![
+                "=== CONTROLS ===",
+                "WASD: Move camera",
+                "Mouse: Look around",
+                "1-9: Select material",
+                "M/E: Cycle build mode",
+                "T: Cycle template",
+                "R: Rotate template",
+                "Ctrl+Z: Undo",
+                "Ctrl+Y: Redo",
+                "H: Toggle help overlay",
+                "ESC: Close overlays",
+            ];
+
+            for help_text in help_texts {
+                self.ui_elements.push(UIElement {
+                    text: help_text.to_string(),
+                    position: (20.0, y_offset),
+                    color: [0.9, 0.9, 0.5],
+                    size: 14.0,
+                });
+                y_offset += 20.0;
+            }
         }
     }
 }
@@ -1717,14 +1948,19 @@ impl RobinApp {
                             format: wgpu::VertexFormat::Float32x3, // position
                         },
                         wgpu::VertexAttribute {
-                            offset: (std::mem::size_of::<[f32; 3]>() * 2 + std::mem::size_of::<[f32; 2]>()) as wgpu::BufferAddress,
+                            offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress, // offset 12
                             shader_location: 1,
-                            format: wgpu::VertexFormat::Float32x3, // color (location 1 in shader)
+                            format: wgpu::VertexFormat::Float32x3, // normal
                         },
                         wgpu::VertexAttribute {
-                            offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                            offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress, // offset 24
                             shader_location: 2,
-                            format: wgpu::VertexFormat::Float32x3, // normal (location 2 in shader)
+                            format: wgpu::VertexFormat::Float32x2, // uv
+                        },
+                        wgpu::VertexAttribute {
+                            offset: (std::mem::size_of::<[f32; 3]>() * 2 + std::mem::size_of::<[f32; 2]>()) as wgpu::BufferAddress, // offset 32
+                            shader_location: 3,
+                            format: wgpu::VertexFormat::Float32x4, // color
                         },
                     ],
                 }],
@@ -2048,6 +2284,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             ui_pipeline,
             ui_vertex_buffer: None,
             ui_index_buffer: None,
+            // Particle Rendering
+            particle_vertex_buffer: None,
             // Engine systems
             camera,
             input_manager,
@@ -2077,6 +2315,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             undo_system: UndoRedoSystem::new(),
             // UI Overlay system
             ui_overlay: UIOverlay::new(),
+            // Help overlay system
+            help_overlay: robin::engine::ui::HelpOverlay::new(),
             // Particle system for block interactions
             particle_system: ParticleSystem::new(1000), // Max 1000 particles
         };
@@ -2753,15 +2993,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // Update particle system
         self.particle_system.update(delta_time);
 
+        // Update help overlay
+        self.help_overlay.update(delta_time, &self.input_manager)?;
+
         // Update UI elements for graphics rendering - extract values to avoid borrowing issues
         let current_mode = self.build_system.get_mode();
         let current_material = VoxelType::Stone; // TODO: implement material system in EngineerBuildMode
-        let template_info = self.template_system.get_current_template().map(|t| (t.name.clone(), self.template_system.current_rotation));
+        let template_info = self.template_system.get_current_template().map(|t| (t.name.clone(), self.template_system.current_rotation as u32));
         let can_undo = self.undo_system.can_undo();
         let can_redo = self.undo_system.can_redo();
 
         // Now update UI with extracted values
-        self.ui_overlay.update_ui_elements_extracted(current_mode, current_material, template_info, can_undo, can_redo);
+        self.ui_overlay.update_ui_elements_extracted(current_mode, current_material, template_info, can_undo, can_redo, &self.help_overlay);
 
         // Create/update UI mesh buffers
         self.create_ui_mesh_buffers();
@@ -3010,6 +3253,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // Render shadow maps for each cascade
         self.render_shadow_maps(&mut encoder, &light_space_matrices)?;
 
+        // Update particle buffer before rendering
+        self.update_particle_buffer();
+
         // Begin render pass with depth buffer
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -3181,69 +3427,45 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         light_space_matrices
     }
 
-    fn render_particles(&mut self, render_pass: &mut wgpu::RenderPass) {
-        let particles = self.particle_system.get_particles();
-        if particles.is_empty() {
+    fn update_particle_buffer(&mut self) {
+        if self.particle_system.particles.is_empty() {
+            self.particle_vertex_buffer = None;
             return;
         }
 
-        // Create particle vertex data on the fly (for simplicity)
-        let mut particle_vertices = Vec::new();
+        // Convert particles to vertex data [position.x, position.y, position.z, color.r, color.g, color.b]
+        let vertex_data: Vec<f32> = self.particle_system.particles
+            .iter()
+            .flat_map(|particle| {
+                [
+                    particle.position.x, particle.position.y, particle.position.z,
+                    particle.color[0], particle.color[1], particle.color[2]
+                ]
+            })
+            .collect();
 
-        for particle in particles {
-            // Create a small cube for each particle
-            let size = particle.size * particle.life; // Scale by life for fade effect
-            let pos = particle.position;
-            let color = [
-                particle.color[0],
-                particle.color[1],
-                particle.color[2],
-            ];
-
-            // Generate 8 vertices for a small cube around the particle position
-            let half_size = size * 0.5;
-            let cube_vertices = [
-                // Bottom face
-                [pos.x - half_size, pos.y - half_size, pos.z - half_size, color[0], color[1], color[2]],
-                [pos.x + half_size, pos.y - half_size, pos.z - half_size, color[0], color[1], color[2]],
-                [pos.x + half_size, pos.y - half_size, pos.z + half_size, color[0], color[1], color[2]],
-                [pos.x - half_size, pos.y - half_size, pos.z + half_size, color[0], color[1], color[2]],
-                // Top face
-                [pos.x - half_size, pos.y + half_size, pos.z - half_size, color[0], color[1], color[2]],
-                [pos.x + half_size, pos.y + half_size, pos.z - half_size, color[0], color[1], color[2]],
-                [pos.x + half_size, pos.y + half_size, pos.z + half_size, color[0], color[1], color[2]],
-                [pos.x - half_size, pos.y + half_size, pos.z + half_size, color[0], color[1], color[2]],
-            ];
-
-            // Add wireframe edges for the cube (12 edges = 24 vertices)
-            let edges = [
-                // Bottom face edges
-                (0, 1), (1, 2), (2, 3), (3, 0),
-                // Top face edges
-                (4, 5), (5, 6), (6, 7), (7, 4),
-                // Vertical edges
-                (0, 4), (1, 5), (2, 6), (3, 7),
-            ];
-
-            for (start, end) in edges.iter() {
-                particle_vertices.extend_from_slice(&cube_vertices[*start]);
-                particle_vertices.extend_from_slice(&cube_vertices[*end]);
-            }
+        if vertex_data.is_empty() {
+            self.particle_vertex_buffer = None;
+            return;
         }
 
-        // Only render if we have particles
-        if !particle_vertices.is_empty() {
-            // Create a temporary vertex buffer for particles
-            let particle_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Particle Vertex Buffer"),
-                contents: bytemuck::cast_slice(&particle_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        // Create or update particle vertex buffer
+        self.particle_vertex_buffer = Some(self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Particle Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertex_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        }));
+    }
 
+    fn render_particles<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        // Render particles using wireframe pipeline as colored points
+        if let Some(particle_buffer) = &self.particle_vertex_buffer {
             render_pass.set_pipeline(&self.wireframe_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, particle_buffer.slice(..));
-            render_pass.draw(0..particle_vertices.len() as u32 / 6, 0..1); // 6 floats per vertex
+
+            let vertex_count = self.particle_system.particles.len() as u32;
+            render_pass.draw(0..vertex_count, 0..1);
         }
     }
 
@@ -3514,7 +3736,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 println!("Selected material: Lava");
                 self.display_status_info();
             }
-            'm' | 'M' => {
+            'm' | 'M' | 'e' | 'E' => {
                 self.cycle_build_mode();
                 self.display_status_info();
             }
@@ -3527,6 +3749,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             'r' | 'R' => {
                 self.template_system.rotate_template();
                 println!("Template rotation: {}°", self.template_system.current_rotation * 90);
+            }
+            'h' | 'H' => {
+                self.help_overlay.toggle();
+                if self.help_overlay.is_visible() {
+                    println!("Help overlay shown");
+                } else {
+                    println!("Help overlay hidden");
+                }
             }
             _ => {}
         }
@@ -4134,7 +4364,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             println!("WASD: Move camera");
             println!("Mouse: Look around");
             println!("1-9: Select material");
-            println!("M: Cycle build mode");
+            println!("M/E: Cycle build mode");
             println!("T: Cycle template (Template mode)");
             println!("R: Rotate template (Template mode)");
             println!("Ctrl+Z: Undo");

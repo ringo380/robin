@@ -13,6 +13,7 @@ use core_graphics::geometry::{CGPoint, CGSize};
 
 use std::collections::HashSet;
 use std::sync::Mutex;
+use crate::logging::{LogCategory, log_info, log_debug};
 
 // Global state for window delegate
 static mut WINDOW_SHOULD_CLOSE: bool = false;
@@ -61,15 +62,17 @@ impl NativeWindow {
             // Enable layer hosting
             let _: () = msg_send![view, setWantsLayer: YES];
 
-            // Create CAMetalLayer
-            let metal_layer_class = Class::get("CAMetalLayer").ok_or("CAMetalLayer class not found")?;
-            let metal_layer: id = msg_send![metal_layer_class, layer];
+            // Make view accept key input to prevent system beeping
+            let _: () = msg_send![view, setAcceptsFirstResponder: YES];
+
+            // Create CAMetalLayer with enhanced error handling and architecture detection
+            let metal_layer = Self::create_metal_layer_safe()?;
 
             // Set the layer on the view
             let _: () = msg_send![view, setLayer: metal_layer];
 
-            // Configure Metal layer
-            let _: () = msg_send![metal_layer, setPixelFormat: 80]; // BGRA8Unorm
+            // Configure Metal layer for proper rendering with error checking
+            Self::configure_metal_layer_safe(metal_layer, width, height)?;
             let drawable_size = CGSize::new(width, height);
             let _: () = msg_send![metal_layer, setDrawableSize: drawable_size];
 
@@ -80,11 +83,24 @@ impl NativeWindow {
             window.center();
             window.makeKeyAndOrderFront_(nil);
 
-            // Activate application
+            // Force window to front
+            window.orderFrontRegardless();
+            window.makeMainWindow();
+            window.makeKeyWindow();
+
+            // Activate application with force
             let current_app = NSRunningApplication::currentApplication(nil);
             current_app.activateWithOptions_(cocoa::appkit::NSApplicationActivateIgnoringOtherApps);
 
-            println!("✅ Real macOS window created with Metal layer");
+            // Force app to front
+            app.activateIgnoringOtherApps_(YES);
+
+            // Make the view the first responder to handle keyboard input without beeping
+            let _: () = msg_send![window, makeFirstResponder: view];
+
+            log_info!(LogCategory::Window, "Real macOS window created with Metal layer");
+            log_debug!(LogCategory::Window, "Window forced to foreground and activated");
+            log_debug!(LogCategory::Window, "View set as first responder for input handling");
 
             Ok(Self {
                 _pool: pool,
@@ -97,6 +113,69 @@ impl NativeWindow {
         }
     }
 
+    /// Creates a Metal layer with enhanced error handling and architecture detection
+    unsafe fn create_metal_layer_safe() -> Result<id, Box<dyn std::error::Error>> {
+        // Check if we're running under Rosetta translation
+        if Self::is_running_under_rosetta() {
+            log_info!(LogCategory::Window, "⚠️  WARNING: Running under Rosetta translation");
+            log_info!(LogCategory::Window, "ℹ️  For optimal performance, build with: cargo build --target aarch64-apple-darwin");
+        }
+
+        // Verify Metal framework is available
+        let metal_layer_class = Class::get("CAMetalLayer")
+            .ok_or("CAMetalLayer class not found - Metal framework may not be available")?;
+
+        log_debug!(LogCategory::Window, "✅ CAMetalLayer class loaded successfully");
+
+        // Create Metal layer with error checking
+        let metal_layer: id = msg_send![metal_layer_class, layer];
+        if metal_layer == nil {
+            return Err("Failed to create CAMetalLayer instance".into());
+        }
+
+        log_debug!(LogCategory::Window, "✅ CAMetalLayer instance created successfully");
+        Ok(metal_layer)
+    }
+
+    /// Configures Metal layer with safer initialization and validation
+    unsafe fn configure_metal_layer_safe(metal_layer: id, width: f64, height: f64) -> Result<(), Box<dyn std::error::Error>> {
+        // Set pixel format with validation
+        let pixel_format: u64 = 80; // BGRA8Unorm
+        let _: () = msg_send![metal_layer, setPixelFormat: pixel_format];
+
+        // Verify pixel format was set correctly
+        let actual_format: u64 = msg_send![metal_layer, pixelFormat];
+        if actual_format != pixel_format {
+            log_debug!(LogCategory::Window, "⚠️  Pixel format mismatch: expected {}, got {}", pixel_format, actual_format);
+        }
+
+        // Configure layer properties
+        let _: () = msg_send![metal_layer, setOpaque: YES];
+        let _: () = msg_send![metal_layer, setPresentsWithTransaction: NO];
+
+        // Set initial drawable size
+        let drawable_size = CGSize::new(width, height);
+        let _: () = msg_send![metal_layer, setDrawableSize: drawable_size];
+
+        log_debug!(LogCategory::Window, "✅ Metal layer configured successfully ({}x{})", width, height);
+        Ok(())
+    }
+
+    /// Detects if the application is running under Rosetta translation
+    fn is_running_under_rosetta() -> bool {
+        unsafe {
+            let mut ret = 0i32;
+            let mut size = std::mem::size_of::<i32>();
+            let result = libc::sysctlbyname(
+                b"sysctl.proc_translated\0".as_ptr() as *const i8,
+                &mut ret as *mut _ as *mut libc::c_void,
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            );
+            result == 0 && ret == 1
+        }
+    }
 
     pub fn get_metal_layer(&self) -> id {
         self.metal_layer
@@ -202,7 +281,7 @@ impl NativeWindow {
 
         // TODO: Implement cursor hide/show when needed
 
-        println!("🖱️  Mouse grab: {}", if self.mouse_grabbed { "ON" } else { "OFF" });
+        log_debug!(LogCategory::Input, "Mouse grab: {}", if self.mouse_grabbed { "ON" } else { "OFF" });
     }
 
     pub fn should_close(&self) -> bool {
@@ -277,4 +356,11 @@ pub mod key_codes {
     pub const ESCAPE: u16 = 53;
     pub const CMD: u16 = 55;
     pub const F: u16 = 3;
+    // Function keys for demo mode switching
+    pub const F1: u16 = 122;
+    pub const F2: u16 = 120;
+    pub const F3: u16 = 99;
+    pub const F4: u16 = 118;
+    pub const F5: u16 = 96;
+    pub const F6: u16 = 97;
 }
