@@ -6,11 +6,11 @@
  */
 
 use crate::engine::{
-    graphics::{Texture, Color},
-    math::{Vec2, Vec3, Transform},
+    graphics::Color,
+    math::Vec2,
     error::{RobinError, RobinResult},
 };
-use super::templates::{UITheme, UIComponent, UIComponentType, UILayoutProperties, UIAnchor, UISpacing, UILayout};
+use super::templates::{UITheme, UIAnchor, UISpacing, UILayout};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

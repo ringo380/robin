@@ -1,6 +1,8 @@
 use std::collections::HashMap;
-use crate::engine::ui::styling::{Color, Spacing, Border, Typography, TextDecoration, AlignItems, JustifyContent, FlexDirection, BoxSizing, Resize};
+
 use serde::{Serialize, Deserialize};
+
+use crate::engine::ui::styling::{Color, Border, Typography, TextDecoration, AlignItems, JustifyContent, FlexDirection, BoxSizing, Resize};
 
 /// Advanced CSS-in-Rust styling system for modern UI components
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

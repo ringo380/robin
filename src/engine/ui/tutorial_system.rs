@@ -8,12 +8,10 @@
 use crate::engine::{
     math::Vec2,
     ui::{
-        UIBounds, UIState, events::UIEvent, UIElement, ElementId, UIManager,
-        modern_components::{ModernButton, ModernCard, ModernNotification, NotificationType, AccessibilityProps},
-        design_system::DesignSystem, styling::Spacing
+        UIBounds, ElementId, UIManager,
+        modern_components::{ModernButton, ModernCard}
     },
     input::InputManager,
-    generation::templates::UITheme,
 };
 use std::collections::HashMap;
 

@@ -2,27 +2,42 @@
 // Provides overlays for inventory, build tools, and settings
 
 use imgui::*;
-use crate::game::{VoxelType, BuildMode};
+use robin::engine::generation::voxel_system::VoxelType;
+use robin::engine::build_mode::BuildMode;
 
 pub mod inventory;
 pub mod build_tools;
 pub mod mini_map;
 pub mod simple_ui;
+pub mod community_panel;
+pub mod unified_hud;
+pub mod performance_dashboard;
+pub mod mode_selection;
+pub mod welcome_flow;
 
 pub use inventory::InventoryPanel;
 pub use build_tools::BuildToolsPanel;
 pub use mini_map::MiniMapPanel;
+pub use community_panel::{CommunityPanel, CommunityAction};
+pub use unified_hud::{UnifiedHUDSystem, UnifiedUIAction};
+pub use performance_dashboard::PerformanceDashboardPanel;
+pub use mode_selection::{ModeSelectionInterface, ModeSelectionAction, DemoMode as ModeSelectionDemoMode};
+pub use welcome_flow::{WelcomeFlowUI, WelcomeFlowAction, WelcomePresentationMode};
 
 pub struct UISystem {
     context: Context,
     inventory_panel: InventoryPanel,
     build_tools_panel: BuildToolsPanel,
     mini_map_panel: MiniMapPanel,
+    community_panel: CommunityPanel,
+    performance_dashboard: PerformanceDashboardPanel,
     show_ui: bool,
     show_inventory: bool,
     show_build_tools: bool,
     show_mini_map: bool,
+    show_community: bool,
     show_settings: bool,
+    show_performance: bool,
     font_texture_id: Option<TextureId>,
     font_texture_data: Option<Vec<u8>>,
     font_texture_width: u32,
@@ -45,11 +60,15 @@ impl UISystem {
             inventory_panel: InventoryPanel::new(),
             build_tools_panel: BuildToolsPanel::new(),
             mini_map_panel: MiniMapPanel::new(),
+            community_panel: CommunityPanel::new(),
+            performance_dashboard: PerformanceDashboardPanel::new(),
             show_ui: true,
             show_inventory: true,
             show_build_tools: true,
             show_mini_map: false,
+            show_community: false,
             show_settings: false,
+            show_performance: false,
             font_texture_id: None, // Will be set later when uploaded to Metal
             font_texture_data: Some(font_texture_data),
             font_texture_width,
@@ -127,6 +146,13 @@ impl UISystem {
         self.show_ui
     }
 
+    pub fn toggle_community(&mut self) {
+        self.show_community = !self.show_community;
+        if self.show_community {
+            self.community_panel.toggle();
+        }
+    }
+
     pub fn handle_key_input(&mut self, key_code: u16) {
         use crate::window::key_codes;
 
@@ -135,8 +161,20 @@ impl UISystem {
             key_codes::KEY_1 => self.show_inventory = !self.show_inventory,
             key_codes::KEY_2 => self.show_build_tools = !self.show_build_tools,
             key_codes::KEY_3 => self.show_mini_map = !self.show_mini_map,
+            key_codes::KEY_4 => self.show_community = !self.show_community,
+            key_codes::KEY_5 => self.toggle_performance_dashboard(),
             key_codes::ESCAPE => self.show_settings = !self.show_settings,
             _ => {}
+        }
+    }
+
+    pub fn toggle_performance_dashboard(&mut self) {
+        self.show_performance = !self.show_performance;
+        self.performance_dashboard.set_visible(self.show_performance);
+        if self.show_performance {
+            println!("🚀 Performance Dashboard enabled - Press F5 for advanced metrics");
+        } else {
+            println!("📊 Performance Dashboard disabled");
         }
     }
 
@@ -300,4 +338,5 @@ pub enum UIAction {
     SaveWorld,
     LoadWorld,
     ClearWorld,
+    Community(CommunityAction),
 }

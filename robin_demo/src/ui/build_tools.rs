@@ -1,7 +1,8 @@
 // Build tools panel for construction controls
 
 use imgui::*;
-use crate::game::{EngineerBuildSystem, BuildMode};
+use crate::game::VoxelBuildSystem;
+use robin::engine::build_mode::BuildMode;
 use crate::ui::UIAction;
 
 pub struct BuildToolsPanel {
@@ -15,7 +16,7 @@ impl BuildToolsPanel {
         }
     }
 
-    pub fn render(&mut self, ui: &Ui, build_system: &EngineerBuildSystem) -> Vec<UIAction> {
+    pub fn render(&mut self, ui: &Ui, build_system: &VoxelBuildSystem) -> Vec<UIAction> {
         let mut actions = Vec::new();
 
         ui.window("🔧 Build Tools")

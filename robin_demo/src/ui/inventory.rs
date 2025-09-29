@@ -1,8 +1,9 @@
 // Inventory panel for material management
 
 use imgui::*;
-use crate::game::{EngineerBuildSystem, VoxelType};
+use robin::engine::generation::voxel_system::VoxelType;
 use crate::ui::UIAction;
+use crate::game::VoxelBuildSystem;
 
 pub struct InventoryPanel {
     window_open: bool,
@@ -15,7 +16,7 @@ impl InventoryPanel {
         }
     }
 
-    pub fn render(&mut self, ui: &Ui, build_system: &EngineerBuildSystem) -> Vec<UIAction> {
+    pub fn render(&mut self, ui: &Ui, build_system: &VoxelBuildSystem) -> Vec<UIAction> {
         let mut actions = Vec::new();
 
         ui.window("📦 Inventory")
@@ -31,23 +32,23 @@ impl InventoryPanel {
 
                 // Material grid - organized by category
                 let materials = [
-                    // Basic Materials
+                    // Basic Materials (mapped to available generation VoxelType variants)
                     (VoxelType::Stone, "🪨", "Stone"),
-                    (VoxelType::Dirt, "🟫", "Dirt"),
-                    (VoxelType::Grass, "🟩", "Grass"),
-                    (VoxelType::Sand, "🟨", "Sand"),
-                    (VoxelType::Water, "🟦", "Water"),
+                    (VoxelType::Solid, "🟫", "Dirt"), // Dirt -> Solid
+                    (VoxelType::Solid, "🟩", "Grass"), // Grass -> Solid (different display name)
+                    (VoxelType::Solid, "🟨", "Sand"), // Sand -> Solid
+                    (VoxelType::Liquid, "🟦", "Water"), // Water -> Liquid
                     (VoxelType::Wood, "🟤", "Wood"),
-                    (VoxelType::Leaves, "🍃", "Leaves"),
+                    (VoxelType::Solid, "🍃", "Leaves"), // Leaves -> Solid
                     // Enhanced Construction Materials
                     (VoxelType::Glass, "🔹", "Glass"),
                     (VoxelType::Metal, "⚙️", "Metal"),
                     (VoxelType::Brick, "🧱", "Brick"),
-                    (VoxelType::Ice, "🧊", "Ice"),
+                    (VoxelType::Solid, "🧊", "Ice"), // Ice -> Solid
                     // Special Materials
-                    (VoxelType::Crystal, "💎", "Crystal"),
-                    (VoxelType::Lava, "🔥", "Lava"),
-                    (VoxelType::Obsidian, "⚫", "Obsidian"),
+                    (VoxelType::Solid, "💎", "Crystal"), // Crystal -> Solid
+                    (VoxelType::Liquid, "🔥", "Lava"), // Lava -> Liquid
+                    (VoxelType::Solid, "⚫", "Obsidian"), // Obsidian -> Solid
                 ];
 
                 let button_size = [60.0, 60.0];
@@ -58,7 +59,7 @@ impl InventoryPanel {
                         ui.same_line();
                     }
 
-                    let count = inventory.get(material).unwrap_or(&0);
+                    let count = inventory.iter().find(|(mat, _)| *mat == *material).map(|(_, count)| *count).unwrap_or(0);
                     let is_selected = current_material == *material;
 
                     // Button styling for selection
@@ -96,7 +97,7 @@ impl InventoryPanel {
 
                 ui.text_colored([1.0, 1.0, 0.0, 1.0], format!("{} {}", selected_info.1, selected_info.2));
 
-                if let Some(count) = inventory.get(&current_material) {
+                if let Some((_, count)) = inventory.iter().find(|(mat, _)| *mat == current_material) {
                     ui.text(format!("Available: {}", count));
                 } else {
                     ui.text("Available: 0");

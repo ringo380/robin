@@ -5,13 +5,13 @@ use super::*;
 use crate::engine::error::RobinResult;
 use crate::engine::ui::modern_architecture::ComponentContext;
 use crate::engine::ui::css_in_rust::{
-    Display, Transition, TimingFunction,
-    TextAlign, TextTransform, FontWeight, Dimension,
-    Cursor, BoxSpacing, BorderStyle, BorderRadius,
+    Transition, TimingFunction,
+    TextAlign, FontWeight, Dimension,
+    Cursor, BorderStyle, BorderRadius,
     Filter, Transform, BoxShadow
 };
 use crate::engine::ui::styling::{
-    AlignItems, JustifyContent, BoxSizing, Color as StylingColor,
+    AlignItems, JustifyContent, Color as StylingColor,
     Border, TextDecoration
 };
 use crate::engine::generation::templates::UITheme;
@@ -219,8 +219,6 @@ impl Button {
     }
 
     fn apply_variant_style(&mut self) {
-        use crate::engine::ui::modern_architecture::Color;
-
         // Default colors (would come from theme in real implementation)
         let primary_color = "#007bff";
         let secondary_color = "#6c757d";

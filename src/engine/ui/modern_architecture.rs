@@ -514,6 +514,17 @@ pub struct FontStyle {
     pub style: FontVariant,
 }
 
+impl Default for FontStyle {
+    fn default() -> Self {
+        Self {
+            family: "Arial".to_string(),
+            size: 14.0,
+            weight: FontWeight::default(),
+            style: FontVariant::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum FontWeight {
     Thin,
@@ -524,11 +535,23 @@ pub enum FontWeight {
     Black,
 }
 
+impl Default for FontWeight {
+    fn default() -> Self {
+        FontWeight::Regular
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum FontVariant {
     Normal,
     Italic,
     Oblique,
+}
+
+impl Default for FontVariant {
+    fn default() -> Self {
+        FontVariant::Normal
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -551,6 +574,20 @@ pub struct Theme {
     pub animations: ThemeAnimations,
 }
 
+impl Default for Theme {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            colors: ThemeColors::default(),
+            typography: ThemeTypography::default(),
+            spacing: ThemeSpacing::default(),
+            borders: ThemeBorders::default(),
+            shadows: ThemeShadows::default(),
+            animations: ThemeAnimations::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeColors {
     pub primary: Color,
@@ -566,6 +603,24 @@ pub struct ThemeColors {
     pub info: Color,
 }
 
+impl Default for ThemeColors {
+    fn default() -> Self {
+        Self {
+            primary: Color::from_hex("#007bff").unwrap_or(Color::new(0.0, 0.48, 1.0, 1.0)),
+            secondary: Color::from_hex("#6c757d").unwrap_or(Color::new(0.42, 0.46, 0.49, 1.0)),
+            accent: Color::from_hex("#17a2b8").unwrap_or(Color::new(0.09, 0.64, 0.72, 1.0)),
+            background: Color::from_hex("#000000").unwrap_or(Color::new(0.0, 0.0, 0.0, 1.0)),
+            surface: Color::from_hex("#1a1a1a").unwrap_or(Color::new(0.1, 0.1, 0.1, 1.0)),
+            text: Color::from_hex("#ffffff").unwrap_or(Color::new(1.0, 1.0, 1.0, 1.0)),
+            text_secondary: Color::from_hex("#cccccc").unwrap_or(Color::new(0.8, 0.8, 0.8, 1.0)),
+            error: Color::from_hex("#dc3545").unwrap_or(Color::new(0.86, 0.21, 0.27, 1.0)),
+            warning: Color::from_hex("#ffc107").unwrap_or(Color::new(1.0, 0.76, 0.03, 1.0)),
+            success: Color::from_hex("#28a745").unwrap_or(Color::new(0.16, 0.65, 0.27, 1.0)),
+            info: Color::from_hex("#17a2b8").unwrap_or(Color::new(0.09, 0.64, 0.72, 1.0)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeTypography {
     pub font_family: String,
@@ -575,6 +630,20 @@ pub struct ThemeTypography {
     pub body: FontStyle,
     pub caption: FontStyle,
     pub button: FontStyle,
+}
+
+impl Default for ThemeTypography {
+    fn default() -> Self {
+        Self {
+            font_family: "Arial".to_string(),
+            heading1: FontStyle { size: 32.0, weight: FontWeight::Bold, ..FontStyle::default() },
+            heading2: FontStyle { size: 24.0, weight: FontWeight::Bold, ..FontStyle::default() },
+            heading3: FontStyle { size: 18.0, weight: FontWeight::Bold, ..FontStyle::default() },
+            body: FontStyle::default(),
+            caption: FontStyle { size: 12.0, ..FontStyle::default() },
+            button: FontStyle { size: 14.0, weight: FontWeight::Medium, ..FontStyle::default() },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -587,6 +656,19 @@ pub struct ThemeSpacing {
     pub xxl: f32,
 }
 
+impl Default for ThemeSpacing {
+    fn default() -> Self {
+        Self {
+            xs: 4.0,
+            sm: 8.0,
+            md: 16.0,
+            lg: 24.0,
+            xl: 32.0,
+            xxl: 48.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeBorders {
     pub radius_sm: f32,
@@ -597,6 +679,19 @@ pub struct ThemeBorders {
     pub width_thick: f32,
 }
 
+impl Default for ThemeBorders {
+    fn default() -> Self {
+        Self {
+            radius_sm: 4.0,
+            radius_md: 8.0,
+            radius_lg: 12.0,
+            width_thin: 1.0,
+            width_medium: 2.0,
+            width_thick: 4.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeShadows {
     pub sm: ShadowStyle,
@@ -605,12 +700,34 @@ pub struct ThemeShadows {
     pub xl: ShadowStyle,
 }
 
+impl Default for ThemeShadows {
+    fn default() -> Self {
+        Self {
+            sm: ShadowStyle { offset: Vec2::new(0.0, 1.0), blur: 2.0, ..ShadowStyle::default() },
+            md: ShadowStyle::default(),
+            lg: ShadowStyle { offset: Vec2::new(0.0, 4.0), blur: 8.0, ..ShadowStyle::default() },
+            xl: ShadowStyle { offset: Vec2::new(0.0, 8.0), blur: 16.0, ..ShadowStyle::default() },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShadowStyle {
     pub offset: Vec2,
     pub blur: f32,
     pub spread: f32,
     pub color: Color,
+}
+
+impl Default for ShadowStyle {
+    fn default() -> Self {
+        Self {
+            offset: Vec2::new(0.0, 2.0),
+            blur: 4.0,
+            spread: 0.0,
+            color: Color::new(0.0, 0.0, 0.0, 0.25),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -623,6 +740,21 @@ pub struct ThemeAnimations {
     pub easing_ease_out: String,
     pub easing_ease_in_out: String,
     pub easing_spring: String,
+}
+
+impl Default for ThemeAnimations {
+    fn default() -> Self {
+        Self {
+            duration_fast: 0.15,
+            duration_normal: 0.3,
+            duration_slow: 0.5,
+            easing_linear: "linear".to_string(),
+            easing_ease_in: "ease-in".to_string(),
+            easing_ease_out: "ease-out".to_string(),
+            easing_ease_in_out: "ease-in-out".to_string(),
+            easing_spring: "cubic-bezier(0.68, -0.55, 0.265, 1.55)".to_string(),
+        }
+    }
 }
 
 // ============================================================================
@@ -857,13 +989,17 @@ mod tests {
     #[test]
     fn test_reactive_property() {
         let mut reactive = Reactive::new(42);
-        let mut received_value = 0;
+
+        // Use Arc<Mutex<>> for thread-safe shared mutable state in closure
+        let received_value = std::sync::Arc::new(std::sync::Mutex::new(0));
+        let captured_value = received_value.clone();
 
         reactive.subscribe(move |value| {
-            received_value = *value;
+            *captured_value.lock().unwrap() = *value;
         });
 
         reactive.set(100);
         assert_eq!(*reactive.get(), 100);
+        assert_eq!(*received_value.lock().unwrap(), 100);
     }
 }

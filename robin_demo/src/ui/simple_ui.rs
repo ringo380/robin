@@ -1,8 +1,10 @@
 // Simple UI system for testing ImGui Metal integration
 use imgui::*;
 use core_graphics::geometry::CGSize;
-use crate::game::{EngineerBuildSystem, VoxelType};
+use robin::engine::generation::voxel_system::VoxelType;
 use crate::renderer::Camera;
+use crate::ui::performance_dashboard::PerformanceDashboardPanel;
+use crate::demo_state::PerformanceDashboard;
 
 #[derive(Debug, Clone)]
 pub enum UIAction {
@@ -18,6 +20,8 @@ pub enum UIAction {
 pub struct SimpleUISystem {
     context: Context,
     show_ui: bool,
+    performance_dashboard: PerformanceDashboardPanel,
+    show_performance: bool,
     font_texture_id: Option<TextureId>,
     font_texture_data: Option<Vec<u8>>,
     font_texture_width: u32,
@@ -35,6 +39,8 @@ impl SimpleUISystem {
         Self {
             context,
             show_ui: true,
+            performance_dashboard: PerformanceDashboardPanel::new(),
+            show_performance: false,
             font_texture_id: None,
             font_texture_data: Some(font_texture_data),
             font_texture_width,
@@ -63,6 +69,16 @@ impl SimpleUISystem {
         self.context.fonts().tex_id = texture_id;
     }
 
+    pub fn toggle_performance_dashboard(&mut self) {
+        self.show_performance = !self.show_performance;
+        self.performance_dashboard.set_visible(self.show_performance);
+        if self.show_performance {
+            println!("🚀 Performance Dashboard enabled");
+        } else {
+            println!("📊 Performance Dashboard disabled");
+        }
+    }
+
     pub fn handle_key_input(&mut self, key_code: u16) {
         match key_code {
             48 => self.show_ui = !self.show_ui, // Tab key
@@ -73,7 +89,7 @@ impl SimpleUISystem {
     pub fn update_and_render(
         &mut self,
         window_size: CGSize,
-        _build_system: &mut EngineerBuildSystem,
+        _build_system: &mut impl std::fmt::Debug,
         camera: &Camera,
         delta_time: f32,
         _time_of_day: f32,
@@ -81,6 +97,7 @@ impl SimpleUISystem {
         time_paused: bool,
         time_string: &str,
         day_phase: &str,
+        performance_dashboard_data: Option<&PerformanceDashboard>,
     ) -> (Vec<UIAction>, Option<&imgui::DrawData>) {
         let mut actions = Vec::new();
 
@@ -167,6 +184,11 @@ impl SimpleUISystem {
                     ui.text("B - Build mode");
                     ui.text("Tab - Toggle UI");
                 });
+
+        // Render performance dashboard if enabled and data is available
+        if let Some(perf_data) = performance_dashboard_data {
+            self.performance_dashboard.render(&ui, perf_data);
+        }
         }
         // If UI is hidden, we still need to complete the frame lifecycle
         // but don't build any windows

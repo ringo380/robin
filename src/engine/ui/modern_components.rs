@@ -6,13 +6,11 @@
  */
 
 use crate::engine::{
-    math::Vec2,
     ui::{
-        UIBounds, UIState, events::UIEvent, UIElement, ElementId, styling::{StateStyle, Color, Spacing, UITheme, DesignSystem}
+        UIBounds, UIState, events::UIEvent, UIElement, ElementId, styling::{StateStyle, UITheme, DesignSystem}
     },
     input::InputManager,
 };
-use std::collections::HashMap;
 
 /// Accessibility features for UI components
 #[derive(Debug, Clone)]
@@ -147,6 +145,10 @@ impl ModernButton {
                 callback();
             }
         }
+    }
+
+    pub fn get_text(&self) -> &String {
+        &self.text
     }
 }
 

@@ -620,7 +620,10 @@ mod tests {
         let dark = Theme::default();
         let light = Theme {
             name: "light".to_string(),
-            background: Color::from_hex("#ffffff").unwrap(),
+            colors: ThemeColors {
+                background: Color::from_hex("#ffffff").unwrap(),
+                ..ThemeColors::default()
+            },
             ..Theme::default()
         };
 
@@ -629,7 +632,7 @@ mod tests {
 
         let mid = interpolator.get_interpolated();
         // Background should be somewhere between black and white
-        assert!(mid.background.r > 0.0 && mid.background.r < 1.0);
+        assert!(mid.colors.background.r > 0.0 && mid.colors.background.r < 1.0);
     }
 
     #[test]

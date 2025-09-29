@@ -4,7 +4,7 @@
 use super::*;
 use crate::engine::error::RobinResult;
 use crate::engine::generation::templates::UITheme;
-use crate::engine::ui::modern_architecture::{ComponentContext, Bounds, RenderPrimitive};
+use crate::engine::ui::modern_architecture::{ComponentContext, Bounds};
 use serde::{Serialize, Deserialize};
 
 /// Grid layout component

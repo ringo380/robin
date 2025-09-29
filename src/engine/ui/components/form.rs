@@ -1129,7 +1129,7 @@ mod tests {
         assert!(!checkbox.is_checked());
 
         let click_event = UIEvent::Click {
-            component_id: checkbox.id(),
+            component_id: checkbox.id().to_string(),
             position: (0.0, 0.0),
         };
 

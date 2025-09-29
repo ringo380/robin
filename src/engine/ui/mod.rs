@@ -19,22 +19,76 @@ pub mod theme_engine;
 pub mod css_in_rust;
 pub mod state_management;
 pub mod performance;
+pub mod help_overlay;
+pub mod production_theme_simple;
+pub mod main_menu;
+pub mod game_hud;
+pub mod settings_menu;
+// Temporarily using stub version to avoid ImGui dependencies
+pub mod gameplay_integration_stub;
+pub use gameplay_integration_stub as gameplay_integration;
+pub mod modern_ui_framework;
+pub mod modern_component_library;
+pub mod modern_interface_system;
+pub mod building_ui_integration;
+pub mod production_ui;
+pub mod transitions;
+pub mod dashboard;
+pub mod welcome_flow;
 
-pub use layout::*;
-pub use legacy_components::*;
-pub use components::*;
+// Layout system - use modern layout as primary
+pub use layout::{LayoutManager, LayoutConstraints, GridAutoFlow};
+pub use layout::FlexWrap as PrimaryFlexWrap;
+
+// Component systems - explicit exports to avoid conflicts
+pub use legacy_components::{Button as LegacyButton, ProgressBar as LegacyProgressBar, Label, Panel, Slider};
+pub use components::{Button, ProgressBar, ComponentProps};
 pub use events::{UIEvent, EventHandler, EventDispatcher, EventCallback};
 pub use styling::{Color as UIColor, Spacing, Border, StateStyle, UIStyle, Typography, TextDecoration, AlignItems, JustifyContent, FlexDirection, BoxSizing, Resize, TextAlign, BorderStyle};
-pub use modern_components::{AccessibilityProps, ModernButton, ModernCard, ModernNotification, NotificationType};
+pub use modern_components::{AccessibilityProps, ModernButton, ModernCard, ModernNotification};
+
+// Architecture and systems - selective imports to avoid conflicts
+pub use modern_architecture::{ComponentContext, ComponentId, ComponentState};
+pub use design_system::{DesignSystem, ColorPalette, TypographyScale, SpacingScale};
+pub use theme_engine::ThemeEngine;
+pub use css_in_rust::{StyleSheet, Style, Display, Position, Dimension};
+pub use state_management::{StateManager, Context, Subscription, UseState};
 pub use tutorial_system::*;
-pub use modern_architecture::*;
-pub use design_system::{DesignSystem, ColorPalette};
-pub use theme_engine::*;
-pub use css_in_rust::*;
-pub use state_management::*;
+pub use help_overlay::*;
+pub use production_theme_simple::{ProductionDarkTheme, DarkColorPalette, DarkTypography, SpacingSystem, AnimationSystem, ComponentStyles};
+pub use main_menu::{MainMenuSystem, MenuAction, GameMode, MenuScreen, WorldInfo};
+pub use game_hud::{GameHUDSystem, HUDAction, HUDPanel, PerformanceMetrics, BuildState, GameState};
+pub use settings_menu::{SettingsMenuSystem, SettingsAction, SettingsCategory, SettingsConfig, GraphicsQuality, ShadowQuality, AntiAliasingMode, ColorBlindMode};
+pub use gameplay_integration::{GameplayUIIntegration, ConnectionStatus, PlayerInfo, ChatMessage, ChatMessageType, NotificationType};
+pub use modern_ui_framework::{
+    ModernUIFramework, VirtualDOM, Component as ModernComponent, Hooks, StateStore, ResponsiveLayoutEngine,
+    AnimationController, ModernThemeSystem, Theme,
+    VNode, Props, PropValue, ComponentId as ModernComponentId, RenderContext, RenderCommands,
+    // Responsive Design System
+    Breakpoint as ModernBreakpoint, ResponsiveValue, FluidTypography, ContainerQuery, ResponsiveSpacing, ResponsiveGrid,
+    // Animation System
+    EasingFunction as ModernEasingFunction, Animation as ModernAnimation, AnimatedProperty, MicroInteraction, SlideDirection,
+    AnimationSequence, AnimationStep, AnimationRepeat, AnimationFillMode,
+    // Accessibility System
+    AccessibilityManager as ModernAccessibilityManager, WCAGLevel, ColorContrastAnalyzer, ScreenReaderSupport, AriaLive,
+    KeyboardNavigation, KeyboardShortcut, KeyModifier, MotionPreferences, FocusManager as ModernFocusManager,
+    AccessibilityReport, UIEvent as ModernUIEvent, EventHandler as ModernEventHandler
+};
+pub use modern_component_library::{
+    ModernButton as ComponentButton, ModernCard as ComponentCard, ModernInput, ModernModal, ModernDropdown, ComponentLibrary,
+    ButtonVariant, ButtonSize, CardVariant, InputType, InputSize, ModalSize,
+    ToastManager, ToastType, DropdownItem
+};
+pub use building_ui_integration::{
+    BuildingUIIntegrationManager, GestureUIFeedbackSystem, CollaborativeUIManager,
+    BuildingVisualizationUI, RealTimeInspectorUI, ContextualHelpSystem, ResponsiveToolPaletteUI,
+    AccessibilityBridgeSystem, UIPerformanceMonitor, UIResponse, UISuggestion, UIConfiguration
+};
+
+// Export UIManager and related types are defined above
 pub use performance::{
     PerformantUIRenderer, UIPerformanceConfig, UIPerformanceMetrics, VirtualScrollManager,
-    VirtualScrollConfig, UIComponent, RenderContext, UIPerformanceReport
+    VirtualScrollConfig, UIComponent, UIPerformanceReport
 };
 
 /// Unique identifier for UI elements
@@ -135,6 +189,30 @@ pub trait UIElement {
     fn handle_event(&mut self, event: &UIEvent) -> bool;
 }
 
+/// UI mode enumeration for switching between different UI states
+#[derive(Debug, Clone, PartialEq)]
+pub enum UIMode {
+    MainMenu,
+    InGame,
+    Settings,
+    Paused,
+}
+
+/// UI actions that can be triggered from the production UI systems
+#[derive(Debug, Clone)]
+pub enum UIAction {
+    StartGame,
+    StartCreativeMode,
+    QuitGame,
+    ToggleBuildMode,
+    SelectMaterial(crate::engine::world::VoxelType),
+    SettingsAction(SettingsAction),
+    SaveGame,
+    LoadGame,
+    PauseGame,
+    ResumeGame,
+}
+
 /// Main UI manager that handles all UI elements and interactions
 pub struct UIManager {
     elements: HashMap<ElementId, Box<dyn UIElement>>,
@@ -153,6 +231,13 @@ pub struct UIManager {
     screen_reader_mode: bool,
     notifications: Vec<ElementId>,
     tutorial_system: TutorialSystem,
+    // Production UI Systems
+    main_menu: MainMenuSystem,
+    game_hud: GameHUDSystem,
+    settings_menu: SettingsMenuSystem,
+    current_ui_mode: UIMode,
+    // Gameplay Integration
+    gameplay_integration: GameplayUIIntegration,
 }
 
 impl UIManager {
@@ -174,6 +259,13 @@ impl UIManager {
             screen_reader_mode: false,
             notifications: Vec::new(),
             tutorial_system: TutorialSystem::new(),
+            // Initialize production UI systems
+            main_menu: MainMenuSystem::new(),
+            game_hud: GameHUDSystem::new(1920.0, 1080.0),
+            settings_menu: SettingsMenuSystem::new(1920.0, 1080.0),
+            current_ui_mode: UIMode::MainMenu,
+            // Initialize gameplay integration
+            gameplay_integration: GameplayUIIntegration::new(),
         }
     }
 
@@ -272,13 +364,13 @@ impl UIManager {
     }
 
     /// Animate a UI element
-    pub fn animate_element(&mut self, id: ElementId, animation: Animation) {
+    pub fn animate_element(&mut self, id: ElementId, animation: crate::engine::animation::Animation) {
         self.animation_manager.add_animation(format!("ui_element_{}", id), animation);
     }
 
     /// Fade in a UI element
     pub fn fade_in_element(&mut self, id: ElementId, duration: Duration) {
-        let animation = Animation::new(
+        let animation = crate::engine::animation::Animation::new(
             AnimationTarget::Alpha(0.0, 1.0),
             duration,
             EaseType::EaseOut,
@@ -288,7 +380,7 @@ impl UIManager {
 
     /// Fade out a UI element
     pub fn fade_out_element(&mut self, id: ElementId, duration: Duration) {
-        let animation = Animation::new(
+        let animation = crate::engine::animation::Animation::new(
             AnimationTarget::Alpha(1.0, 0.0),
             duration,
             EaseType::EaseOut,
@@ -298,7 +390,7 @@ impl UIManager {
 
     /// Slide a UI element to a new position
     pub fn slide_element(&mut self, id: ElementId, from: Vec2, to: Vec2, duration: Duration) {
-        let animation = Animation::new(
+        let animation = crate::engine::animation::Animation::new(
             AnimationTarget::Position(from, to),
             duration,
             EaseType::EaseInOut,
@@ -308,7 +400,7 @@ impl UIManager {
 
     /// Scale a UI element with bouncy effect
     pub fn bounce_element(&mut self, id: ElementId, from_scale: f32, to_scale: f32, duration: Duration) {
-        let animation = Animation::new(
+        let animation = crate::engine::animation::Animation::new(
             AnimationTarget::Size(from_scale, to_scale),
             duration,
             EaseType::Bounce,
@@ -318,16 +410,16 @@ impl UIManager {
 
     /// Create a pulsing glow effect
     pub fn pulse_element(&mut self, id: ElementId, duration: Duration) {
-        let animation = Animation::new(
+        let animation = crate::engine::animation::Animation::new(
             AnimationTarget::Size(1.0, 1.1),
             duration,
             EaseType::EaseInOut,
         );
         // Set to repeat
         self.animate_element(id, animation);
-        
+
         // Also pulse the alpha
-        let alpha_animation = Animation::new(
+        let alpha_animation = crate::engine::animation::Animation::new(
             AnimationTarget::Alpha(1.0, 0.7),
             duration,
             EaseType::EaseInOut,
@@ -711,5 +803,185 @@ impl UIManager {
                 log::debug!("Refreshing tutorial UI");
             }
         }
+    }
+
+    // Production UI System Integration Methods
+
+    /// Update production UI systems
+    pub async fn update_production_ui(&mut self, delta_time: f32, input: &InputManager) -> crate::engine::error::RobinResult<Vec<UIAction>> {
+        let mut all_actions = Vec::new();
+
+        match self.current_ui_mode {
+            UIMode::MainMenu => {
+                let menu_actions = self.main_menu.update(delta_time, input).await?;
+                for action in menu_actions {
+                    match action {
+                        MenuAction::StartSinglePlayer => {
+                            self.current_ui_mode = UIMode::InGame;
+                            all_actions.push(UIAction::StartGame);
+                        }
+                        MenuAction::StartCreativeMode => {
+                            self.current_ui_mode = UIMode::InGame;
+                            all_actions.push(UIAction::StartCreativeMode);
+                        }
+                        MenuAction::OpenSettings => {
+                            self.current_ui_mode = UIMode::Settings;
+                        }
+                        MenuAction::QuitApplication => {
+                            all_actions.push(UIAction::QuitGame);
+                        }
+                        _ => {
+                            // Handle other menu actions
+                        }
+                    }
+                }
+            }
+            UIMode::InGame => {
+                let hud_actions = self.game_hud.update(delta_time, input)?;
+                for action in hud_actions {
+                    match action {
+                        HUDAction::ShowSettings => {
+                            self.current_ui_mode = UIMode::Settings;
+                        }
+                        HUDAction::PauseGame => {
+                            self.current_ui_mode = UIMode::Paused;
+                        }
+                        HUDAction::ToggleBuildMode => {
+                            all_actions.push(UIAction::ToggleBuildMode);
+                        }
+                        HUDAction::SelectMaterial(material) => {
+                            all_actions.push(UIAction::SelectMaterial(material));
+                        }
+                        _ => {
+                            // Handle other HUD actions
+                        }
+                    }
+                }
+            }
+            UIMode::Settings => {
+                let settings_actions = self.settings_menu.update(delta_time, input)?;
+                for action in settings_actions {
+                    match action {
+                        SettingsAction::Close => {
+                            self.current_ui_mode = UIMode::InGame;
+                        }
+                        SettingsAction::CancelSettings => {
+                            self.current_ui_mode = UIMode::InGame;
+                        }
+                        _ => {
+                            // Forward other settings actions to the game
+                            all_actions.push(UIAction::SettingsAction(action));
+                        }
+                    }
+                }
+            }
+            UIMode::Paused => {
+                // Handle paused state
+                let menu_actions = self.main_menu.update(delta_time, input).await?;
+                for action in menu_actions {
+                    match action {
+                        MenuAction::Back => {
+                            self.current_ui_mode = UIMode::InGame;
+                        }
+                        MenuAction::QuitApplication => {
+                            all_actions.push(UIAction::QuitGame);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(all_actions)
+    }
+
+    /// Get current UI mode
+    pub fn get_ui_mode(&self) -> &UIMode {
+        &self.current_ui_mode
+    }
+
+    /// Set UI mode
+    pub fn set_ui_mode(&mut self, mode: UIMode) {
+        // Handle mode transitions
+        match mode {
+            UIMode::MainMenu => {
+                self.main_menu.show();
+                self.game_hud.hide();
+                self.settings_menu.hide();
+            }
+            UIMode::InGame => {
+                self.main_menu.hide();
+                self.game_hud.show();
+                self.settings_menu.hide();
+            }
+            UIMode::Settings => {
+                self.settings_menu.show();
+            }
+            UIMode::Paused => {
+                // Show pause overlay
+                self.main_menu.show();
+            }
+        }
+
+        // Set the new mode after handling transitions
+        self.current_ui_mode = mode;
+    }
+
+    /// Get main menu system
+    pub fn get_main_menu(&self) -> &MainMenuSystem {
+        &self.main_menu
+    }
+
+    /// Get main menu system (mutable)
+    pub fn get_main_menu_mut(&mut self) -> &mut MainMenuSystem {
+        &mut self.main_menu
+    }
+
+    /// Get game HUD system
+    pub fn get_game_hud(&self) -> &GameHUDSystem {
+        &self.game_hud
+    }
+
+    /// Get game HUD system (mutable)
+    pub fn get_game_hud_mut(&mut self) -> &mut GameHUDSystem {
+        &mut self.game_hud
+    }
+
+    /// Get settings menu system
+    pub fn get_settings_menu(&self) -> &SettingsMenuSystem {
+        &self.settings_menu
+    }
+
+    /// Get settings menu system (mutable)
+    pub fn get_settings_menu_mut(&mut self) -> &mut SettingsMenuSystem {
+        &mut self.settings_menu
+    }
+
+    /// Get gameplay integration system
+    pub fn get_gameplay_integration(&self) -> &GameplayUIIntegration {
+        &self.gameplay_integration
+    }
+
+    /// Get gameplay integration system (mutable)
+    pub fn get_gameplay_integration_mut(&mut self) -> &mut GameplayUIIntegration {
+        &mut self.gameplay_integration
+    }
+
+    /// Update gameplay integration with external systems
+    pub fn update_gameplay_integration(
+        &mut self,
+        build_mode: &mut crate::engine::build_mode::EngineerBuildMode,
+        network_manager: &mut crate::engine::networking::NetworkManager,
+        save_manager: &mut crate::engine::save_system::SaveManager,
+        input: &InputManager,
+        delta_time: f32,
+    ) -> crate::engine::error::RobinResult<Vec<MenuAction>> {
+        self.gameplay_integration.update(build_mode, network_manager, save_manager, input, delta_time)
+    }
+
+    /// Render gameplay integration UI
+    #[cfg(feature = "imgui-support")]
+    pub fn render_gameplay_integration(&mut self, ui: &imgui::Ui) -> crate::engine::error::RobinResult<()> {
+        self.gameplay_integration.render(ui)
     }
 }

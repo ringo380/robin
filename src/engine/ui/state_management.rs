@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Weak};
 use std::any::{Any, TypeId};
-use crate::engine::error::RobinResult;
 use serde::{Serialize, Deserialize};
 
 /// Global state management for UI components
