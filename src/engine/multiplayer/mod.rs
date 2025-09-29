@@ -11,6 +11,11 @@ pub mod permissions;
 pub mod communication;
 pub mod shared_assets;
 pub mod synchronization;
+pub mod real_time_networking;
+pub mod collaborative_building;
+pub mod session_management;
+pub mod voice_communication;
+pub mod cross_platform;
 
 pub use networking::{NetworkManager, NetworkConfig, ConnectionInfo, NetworkStats};
 // Remove this line as we define these types below
@@ -20,6 +25,25 @@ pub use permissions::{PermissionManager, Role, Permission, AccessLevel, UserPerm
 pub use communication::{CommunicationManager, ChatManager, VoiceManager, MessageType};
 pub use shared_assets::{SharedAssetManager, AssetLibrary, AssetMetadata, AssetSyncStatus};
 pub use synchronization::{UserCursor, SelectionData, BoundingBox, SynchronizationEngine, SyncStats};
+pub use real_time_networking::{RealTimeNetworkManager, VoxelStateSynchronizer, ConflictResolver};
+pub use collaborative_building::{
+    CollaborativeBuildingManager, CollaborativeSessionCoordinator, BuildingOrchestrator,
+    BuildingPermissionSystem, RealTimeCollaborationEngine, BuildingConflictMediator,
+    ProgressSynchronizer, PhysicsCoordinator, BuildingVersionControl
+};
+pub use session_management::{
+    SessionManagerCore, SessionRegistry, MatchmakingEngine, SessionOrchestrator,
+    SessionLoadBalancer, SessionQualityMonitor, GeographicCoordinator, ScalingManager
+};
+pub use voice_communication::{
+    VoiceCommunicationSystem, AudioEngine, VoiceProcessor, SpatialAudioEngine,
+    VoiceChannelManager, NoiseReductionSystem, VoiceEffectsProcessor, RecordingSystem
+};
+pub use cross_platform::{
+    CrossPlatformMultiplayerSystem, PlatformAbstractionLayer, CompatibilityEngine,
+    ProtocolHarmonizer, InputNormalizer, UIAdapter, PerformanceEqualizer,
+    Platform, PlatformCapabilities, Feature, QualityTier
+};
 
 // Type aliases and additional definitions for collaboration system
 pub use collaboration::CollaborationTools as CollaborationManager;

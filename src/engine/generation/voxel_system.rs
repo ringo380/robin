@@ -7,9 +7,9 @@
  */
 
 use crate::engine::{
-    graphics::{Color, Mesh, Vertex, Texture},
+    graphics::{Color, Mesh, Texture, Vertex},
     math::{Vec3, Vec2},
-    error::{RobinError, RobinResult},
+    error::RobinResult,
 };
 use cgmath::InnerSpace;
 use serde::{Deserialize, Serialize};
@@ -870,8 +870,8 @@ impl VoxelSystem {
 
     /// Generate surface mesh from voxel data using face culling algorithm
     fn generate_surface_mesh(&self, grid: &VoxelGrid, params: &SurfaceParams) -> RobinResult<Mesh> {
-        use crate::engine::graphics::mesh::{Mesh, Vertex};
-        use crate::engine::math::{Vec2, Vec3};
+        use crate::engine::graphics::mesh::Mesh;
+        use crate::engine::math::Vec3;
 
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
