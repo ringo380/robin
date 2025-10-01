@@ -18,6 +18,13 @@ use crate::engine::{
     save_system::SaveManager,
 };
 
+/// Helper function for default VoxelWorld in serde deserialization
+fn default_voxel_world() -> Arc<RwLock<VoxelWorld>> {
+    Arc::new(RwLock::new(
+        VoxelWorld::new("default_room".to_string(), (32, 32, 32))
+    ))
+}
+
 /// Social room manager for collaborative building spaces
 pub struct SocialRoomManager {
     /// Active rooms
@@ -313,17 +320,25 @@ impl SocialRoomManager {
 
     /// Handle voxel changes in a room
     pub async fn handle_voxel_change(&mut self, user_id: Uuid, change: VoxelChange) -> RobinResult<()> {
-        let session = self.user_sessions.get_mut(&user_id)
-            .ok_or_else(|| RobinError::Community("User not in any room".to_string()))?;
+        // Get room_id first without holding borrow
+        let room_id = {
+            let session = self.user_sessions.get(&user_id)
+                .ok_or_else(|| RobinError::Community("User not in any room".to_string()))?;
+            session.room_id
+        };
 
-        let room_id = session.room_id;
+        // Check build permissions first
+        {
+            let room = self.rooms.get(&room_id)
+                .ok_or_else(|| RobinError::Community("Room not found".to_string()))?;
+            if !self.user_can_build(user_id, room, &change)? {
+                return Err(RobinError::Community("Insufficient build permissions".to_string()));
+            }
+        }
+
+        // Now get mutable access for applying changes
         let room = self.rooms.get_mut(&room_id)
             .ok_or_else(|| RobinError::Community("Room not found".to_string()))?;
-
-        // Check build permissions
-        if !self.user_can_build(user_id, room, &change)? {
-            return Err(RobinError::Community("Insufficient build permissions".to_string()));
-        }
 
         // Apply change to world
         {
@@ -352,7 +367,9 @@ impl SocialRoomManager {
             }
         }
 
-        // Update activity
+        // Update activity - get mutable access to session
+        let session = self.user_sessions.get_mut(&user_id)
+            .ok_or_else(|| RobinError::Community("User session not found".to_string()))?;
         session.last_activity = SystemTime::now();
         room.last_activity = SystemTime::now();
 
@@ -599,11 +616,11 @@ pub struct SocialRoom {
     pub tags: Vec<String>,
 
     /// Voxel world for this room
-    #[serde(skip)]
+    #[serde(skip, default = "default_voxel_world")]
     pub world: Arc<RwLock<VoxelWorld>>,
 
     /// Currently connected users
-    #[serde(skip)]
+    #[serde(skip, default)]
     pub connected_users: HashSet<Uuid>,
 
     pub creation_time: SystemTime,
@@ -885,7 +902,8 @@ impl RoomSearchIndex {
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<Uuid> {
-        let query_words: Vec<&str> = query.to_lowercase().split_whitespace().collect();
+        let query_lower = query.to_lowercase();
+        let query_words: Vec<&str> = query_lower.split_whitespace().collect();
         let mut room_scores: HashMap<Uuid, usize> = HashMap::new();
 
         for word in query_words {

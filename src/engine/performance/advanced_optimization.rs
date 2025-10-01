@@ -4,7 +4,7 @@
 use crate::engine::{
     error::{RobinResult, RobinError},
     graphics::GraphicsContext,
-    rendering::RenderingConfig,
+    rendering::{RenderingConfig, RenderObject},
     gpu::{GPUAccelerationSystem, GPUBufferHandle},
 };
 use std::{
@@ -12,6 +12,7 @@ use std::{
     sync::{Arc, RwLock, atomic::{AtomicU64, AtomicBool, Ordering}},
     time::{Instant, Duration},
 };
+use cgmath::InnerSpace;
 
 /// Advanced Performance Optimization Framework
 #[derive(Debug)]
@@ -72,6 +73,10 @@ impl AdvancedOptimizationSystem {
 
         let optimization_duration = start_time.elapsed();
 
+        // Clone metrics for calculating overall improvement before moving them
+        let baseline_for_calc = baseline_metrics.clone();
+        let optimized_for_calc = optimized_metrics.clone();
+
         Ok(OptimizationResults {
             baseline_metrics,
             optimized_metrics,
@@ -81,7 +86,7 @@ impl AdvancedOptimizationSystem {
             parallel_improvements,
             adaptive_adjustments,
             optimization_duration,
-            overall_improvement: self.calculate_overall_improvement(&baseline_metrics, &optimized_metrics),
+            overall_improvement: self.calculate_overall_improvement(&baseline_for_calc, &optimized_for_calc),
         })
     }
 
@@ -292,6 +297,39 @@ impl RenderingOptimizer {
 
         Ok(improvements)
     }
+
+    /// Initialize the rendering optimizer
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize rendering optimization subsystems
+        Ok(())
+    }
+
+    /// Optimize a single frame
+    pub fn optimize_frame(&mut self) -> RobinResult<()> {
+        // TODO: Per-frame rendering optimization
+        Ok(())
+    }
+
+    /// Update rendering optimizer
+    pub fn update(&mut self, _delta_time: f32) -> RobinResult<()> {
+        // TODO: Update rendering optimization state
+        Ok(())
+    }
+
+    /// Get rendering metrics
+    pub fn get_metrics(&self) -> RenderingMetrics {
+        RenderingMetrics::default()
+    }
+
+    /// Set aggressive culling mode
+    pub fn set_aggressive_culling(&mut self, _enabled: bool) {
+        // TODO: Configure aggressive culling
+    }
+
+    /// Get optimization effectiveness
+    pub fn get_effectiveness(&self) -> f32 {
+        0.85 // TODO: Calculate actual effectiveness
+    }
 }
 
 /// GPU Occlusion Culling System
@@ -323,25 +361,36 @@ impl GPUOcclusionCuller {
             self.build_hierarchical_z_buffer(context)?;
         }
 
-        // Test objects for occlusion
+        // First pass: collect visibility information for all objects
+        let mut visibility_results = Vec::new();
         for object in context.get_renderable_objects() {
             let object_id = object.get_id();
 
             // Check visibility cache first
             if let Some(&is_visible) = self.visibility_cache.get(&object_id) {
+                visibility_results.push((object_id, is_visible));
                 if !is_visible {
                     culled_count += 1;
-                    continue;
                 }
+                continue;
             }
 
             // Perform GPU occlusion query
             let is_visible = self.test_object_visibility(object, context)?;
             self.visibility_cache.insert(object_id, is_visible);
+            visibility_results.push((object_id, is_visible));
 
             if !is_visible {
                 culled_count += 1;
-                object.set_culled(true);
+            }
+        }
+
+        // Second pass: apply culling results to objects
+        for (object_id, is_visible) in visibility_results {
+            if !is_visible {
+                if let Some(object) = context.get_renderable_objects_mut().iter_mut().find(|o| o.get_id() == object_id) {
+                    object.set_culled(true);
+                }
             }
         }
 
@@ -411,7 +460,12 @@ impl DynamicBatchOptimizer {
 
         // Create instanced rendering for large batches
         let mut optimized_draw_calls = 0;
-        for (key, objects) in &self.batch_groups {
+        // Clone batch groups to avoid borrow conflict
+        let batch_groups: Vec<(BatchKey, Vec<RenderableObject>)> = self.batch_groups.iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        for (key, objects) in &batch_groups {
             if objects.len() > 1 {
                 // Use instanced rendering for multiple objects
                 self.create_instance_buffer(key, objects, context)?;
@@ -442,7 +496,8 @@ impl DynamicBatchOptimizer {
             });
         }
 
-        buffer.update_data(&instance_data)?;
+        // TODO: Implement buffer update when GPUBufferHandle.update_data() is available
+        // buffer.update_data(&instance_data)?;
         self.instance_buffers.insert(key.clone(), buffer);
 
         Ok(())
@@ -499,6 +554,39 @@ impl MemoryOptimizer {
 
         Ok(improvements)
     }
+
+    /// Initialize memory optimizer
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize memory optimization subsystems
+        Ok(())
+    }
+
+    /// Compact memory pools
+    pub fn compact_pools(&mut self) -> RobinResult<()> {
+        // TODO: Per-frame memory pool compaction
+        Ok(())
+    }
+
+    /// Update memory optimizer
+    pub fn update(&mut self, _delta_time: f32) -> RobinResult<()> {
+        // TODO: Update memory optimization state
+        Ok(())
+    }
+
+    /// Get memory metrics
+    pub fn get_metrics(&self) -> MemoryOptimizationMetrics {
+        MemoryOptimizationMetrics {
+            memory_allocated: 0,
+            memory_freed: 0,
+            fragmentation_ratio: 0.0,
+            pool_hit_rate: 0.0,
+        }
+    }
+
+    /// Get optimization effectiveness
+    pub fn get_effectiveness(&self) -> f32 {
+        0.80 // TODO: Calculate actual effectiveness
+    }
 }
 
 /// Cache Optimizer
@@ -551,6 +639,39 @@ impl CacheOptimizer {
 
         Ok(improvements)
     }
+
+    /// Initialize cache optimizer
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize cache optimization subsystems
+        Ok(())
+    }
+
+    /// Update cache prefetch
+    pub fn update_prefetch(&mut self) -> RobinResult<()> {
+        // TODO: Per-frame cache prefetch optimization
+        Ok(())
+    }
+
+    /// Update cache optimizer
+    pub fn update(&mut self, _delta_time: f32) -> RobinResult<()> {
+        // TODO: Update cache optimization state
+        Ok(())
+    }
+
+    /// Get cache metrics
+    pub fn get_metrics(&self) -> CacheOptimizationMetrics {
+        CacheOptimizationMetrics {
+            cache_hits: 0,
+            cache_misses: 0,
+            hit_rate: 0.0,
+            prefetch_accuracy: 0.0,
+        }
+    }
+
+    /// Get optimization effectiveness
+    pub fn get_effectiveness(&self) -> f32 {
+        0.75 // TODO: Calculate actual effectiveness
+    }
 }
 
 /// Parallel Processing Optimizer
@@ -602,6 +723,33 @@ impl ParallelOptimizer {
         }
 
         Ok(improvements)
+    }
+
+    /// Initialize parallel optimizer
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize parallel optimization subsystems
+        Ok(())
+    }
+
+    /// Update parallel optimizer
+    pub fn update(&mut self, _delta_time: f32) -> RobinResult<()> {
+        // TODO: Update parallel optimization state
+        Ok(())
+    }
+
+    /// Get parallel metrics
+    pub fn get_metrics(&self) -> ParallelProcessingMetrics {
+        ParallelProcessingMetrics {
+            tasks_processed: 0,
+            average_task_time: 0.0,
+            thread_utilization: 0.0,
+            speedup_factor: 1.0,
+        }
+    }
+
+    /// Get optimization effectiveness
+    pub fn get_effectiveness(&self) -> f32 {
+        0.90 // TODO: Calculate actual effectiveness
     }
 }
 
@@ -700,6 +848,23 @@ impl AdaptivePerformanceTuner {
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled.store(enabled, Ordering::Relaxed);
     }
+
+    /// Initialize adaptive tuner
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize adaptive tuning subsystems
+        Ok(())
+    }
+
+    /// Update adaptive tuner
+    pub fn update(&mut self, _delta_time: f32, _frame_metrics: &FrameMetrics) -> RobinResult<()> {
+        // TODO: Update adaptive tuning state
+        Ok(())
+    }
+
+    /// Set aggressive optimization mode
+    pub fn set_aggressive_mode(&mut self, _enabled: bool) {
+        // TODO: Configure aggressive optimization
+    }
 }
 
 /// Performance Profiler
@@ -770,6 +935,18 @@ impl PerformanceProfiler {
     pub fn get_realtime_metrics(&self) -> RealtimePerformanceMetrics {
         self.realtime_metrics.read().unwrap().clone()
     }
+
+    /// Initialize performance profiler
+    pub fn initialize(&mut self) -> RobinResult<()> {
+        // TODO: Initialize performance profiling subsystems
+        Ok(())
+    }
+
+    /// Record frame metrics
+    pub fn record_frame_metrics(&mut self, _frame_metrics: &FrameMetrics) -> RobinResult<()> {
+        // TODO: Record frame performance metrics
+        Ok(())
+    }
 }
 
 // Supporting structures and types
@@ -781,6 +958,13 @@ pub struct OptimizationConfig {
     pub cache_config: CacheOptimizerConfig,
     pub parallel_config: ParallelOptimizerConfig,
     pub adaptive_config: AdaptiveConfig,
+    pub optimization_profile: OptimizationProfile,
+    pub enable_gpu_occlusion: bool,
+    pub enable_dynamic_batching: bool,
+    pub enable_memory_pooling: bool,
+    pub enable_cache_optimization: bool,
+    pub enable_parallel_processing: bool,
+    pub enable_adaptive_tuning: bool,
 }
 
 impl Default for OptimizationConfig {
@@ -791,6 +975,13 @@ impl Default for OptimizationConfig {
             cache_config: CacheOptimizerConfig::default(),
             parallel_config: ParallelOptimizerConfig::default(),
             adaptive_config: AdaptiveConfig::default(),
+            optimization_profile: OptimizationProfile::Balanced,
+            enable_gpu_occlusion: true,
+            enable_dynamic_batching: true,
+            enable_memory_pooling: true,
+            enable_cache_optimization: false,
+            enable_parallel_processing: true,
+            enable_adaptive_tuning: false,
         }
     }
 }
@@ -901,6 +1092,10 @@ pub struct OptimizationContext {
 impl OptimizationContext {
     pub fn get_renderable_objects(&self) -> &[RenderableObject] {
         &self.renderable_objects
+    }
+
+    pub fn get_renderable_objects_mut(&mut self) -> &mut [RenderableObject] {
+        &mut self.renderable_objects
     }
 
     pub fn get_camera_position(&self) -> cgmath::Vector3<f32> {
@@ -1177,6 +1372,13 @@ impl FrameProfiler {
             average_frametime: 16.67,
             current_frametime: 16.13,
             percentile_99_frametime: 20.0,
+            frame_time: 16.13,
+            draw_calls: 0,
+            triangles_rendered: 0,
+            texture_switches: 0,
+            shader_switches: 0,
+            memory_allocated: 0,
+            cache_misses: 0,
         })
     }
 }
@@ -1234,7 +1436,7 @@ pub struct GPUMetrics {
     pub memory_usage: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MemoryMetrics {
     pub total_usage: usize,
 }
@@ -1298,7 +1500,7 @@ pub struct OptimizationMetrics {
     pub current_profile: OptimizationProfile,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RenderingMetrics {
     pub draw_calls: u32,
     pub triangles_rendered: u32,

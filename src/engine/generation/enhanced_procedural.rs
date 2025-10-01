@@ -10,7 +10,7 @@ use crate::engine::{
     graphics::Color,
     math::{Vec2, Vec3, Mat4},
     error::{RobinError, RobinResult},
-    world::{AdvancedMaterialSystem, AdvancedMaterialType, MaterialInteraction},
+    world::{AdvancedMaterialSystem, AdvancedMaterialType, MaterialInteraction, AdvancedMaterialProperties},
     build_mode::{EnhancedTemplateLibrary, EnhancedTemplate, TemplateCategory},
 };
 use super::{
@@ -77,11 +77,11 @@ pub struct EnhancedProceduralEngine {
     /// Base generation engine
     base_engine: GenerationEngine,
     /// Advanced material system integration
-    material_system: AdvancedMaterialSystem,
+    pub material_system: AdvancedMaterialSystem,
     /// Enhanced template library integration
-    template_library: Arc<RwLock<EnhancedTemplateLibrary>>,
+    pub template_library: Arc<RwLock<EnhancedTemplateLibrary>>,
     /// Machine learning integration for content generation
-    ml_generator: MachineLearningGenerator,
+    pub ml_generator: MachineLearningGenerator,
     /// Advanced algorithmic generators
     algorithmic_generators: AlgorithmicGenerators,
     /// Context-aware generation system
@@ -89,11 +89,11 @@ pub struct EnhancedProceduralEngine {
     /// Multi-scale generation system
     multi_scale_generator: MultiScaleGenerator,
     /// Configuration for enhanced features
-    enhanced_config: EnhancedGenerationConfig,
+    pub enhanced_config: EnhancedGenerationConfig,
     /// Performance tracking
-    performance_metrics: GenerationMetrics,
+    pub performance_metrics: GenerationMetrics,
     /// Performance optimization engine (Phase 6)
-    performance_engine: Option<PerformanceOptimizationEngine>,
+    pub performance_engine: Option<PerformanceOptimizationEngine>,
     /// Performance optimization configuration
     performance_config: Option<PerformanceOptimizationConfig>,
     /// Generation history for analytics
@@ -188,12 +188,17 @@ impl EnhancedProceduralEngine {
     pub fn generate_enhanced_environment(&mut self, params: EnhancedEnvironmentParams) -> RobinResult<EnhancedGeneratedEnvironment> {
         let start_time = std::time::Instant::now();
 
+        // Clone params for later use before any moves
+        let params_for_terrain = params.clone();
+        let params_for_biome = params.clone();
+        let params_for_ml = params.clone();
+
         // Generate base environment
         let base_params = EnvironmentParams {
             style: params.style,
             detail_level: params.detail_level,
             environment_type: params.environment_type.clone(),
-            terrain: params.terrain_type,
+            terrain: params.terrain_type.clone(),
             climate: params.climate.clone(),
             density: params.density,
             dimensions: params.dimensions,
@@ -202,14 +207,14 @@ impl EnhancedProceduralEngine {
         let base_environment = self.base_engine.generate_environment(base_params)?;
 
         // Generate advanced terrain using sophisticated algorithms
-        let enhanced_terrain = self.algorithmic_generators.generate_advanced_terrain(&params)?;
+        let enhanced_terrain = self.algorithmic_generators.generate_advanced_terrain(&params_for_terrain)?;
 
         // Generate biome-specific vegetation and features
-        let biome_features = self.generate_biome_features(&params)?;
+        let biome_features = self.generate_biome_features(&params_for_biome)?;
 
         // Apply machine learning for realistic detail distribution
-        let ml_distribution = if params.use_ml_distribution {
-            self.ml_generator.optimize_environment_distribution(&params)?
+        let ml_distribution = if params_for_ml.use_ml_distribution {
+            self.ml_generator.optimize_environment_distribution(&params_for_ml)?
         } else {
             MLEnvironmentDistribution::default()
         };
@@ -337,25 +342,27 @@ impl EnhancedProceduralEngine {
 
     /// Generate template-enhanced content using the enhanced template library
     pub fn generate_from_enhanced_template(&mut self, template_id: &str, params: TemplateGenerationParams) -> RobinResult<TemplateGeneratedContent> {
-        let template_lib = self.template_library.read().unwrap();
-        let template = template_lib.get_template(template_id)
-            .ok_or_else(|| RobinError::ResourceNotFound {
-                resource_type: "EnhancedTemplate".to_string(),
-                resource_id: template_id.to_string(),
-            })?;
+        // Clone the template data to avoid holding the read lock during mutable operations
+        let template = {
+            let template_lib = self.template_library.read().unwrap();
+            template_lib.get_template(template_id)
+                .ok_or_else(|| RobinError::FileNotFound(
+                    format!("EnhancedTemplate: {}", template_id).into()
+                ))?.clone()
+        }; // Read lock is dropped here
 
         // Generate content based on template structure
         let mut content_pieces = Vec::new();
 
-        // Process template structure blocks
-        for (position, block) in &template.structure.blocks {
+        // Process template structure voxels
+        for (position, voxel) in &template.structure.voxels {
             let enhanced_object_params = EnhancedObjectParams {
                 template_id: Some(template_id.to_string()),
-                object_type: block.material.to_string(),
-                position: *position,
+                object_type: format!("{:?}", voxel),  // Convert VoxelType enum to string
+                position: Vec3::new(position.x as f32, position.y as f32, position.z as f32),
                 scale: params.scale,
-                advanced_material_type: AdvancedMaterialType::Stone, // Default, could be mapped from block material
-                material_properties: Default::default(),
+                advanced_material_type: AdvancedMaterialType::Granite, // Default stone material
+                material_properties: AdvancedMaterialProperties::default(),
                 use_ml_optimization: params.use_ml_enhancement,
                 context_hints: params.context_hints.clone(),
                 quality_preference: params.quality_preference,
@@ -400,7 +407,7 @@ impl EnhancedProceduralEngine {
             base_stats,
             ml_generation_count: self.ml_generator.get_generation_count(),
             algorithm_performance: self.algorithmic_generators.get_performance_stats(),
-            material_generation_count: self.material_system.get_generation_count(),
+            material_generation_count: self.material_system.get_generation_count() as u64,  // Cast u32 to u64
             template_usage_stats: self.get_template_usage_stats(),
             performance_metrics: self.performance_metrics.clone(),
         }
@@ -410,27 +417,27 @@ impl EnhancedProceduralEngine {
     fn generate_character_materials(&mut self, params: &EnhancedCharacterParams) -> RobinResult<Vec<EnhancedMaterial>> {
         let mut materials = Vec::new();
 
-        // Generate skin material with advanced properties
+        // Generate skin material with advanced properties (using Leather as organic material)
         let skin_material = self.material_system.create_advanced_material(
-            AdvancedMaterialType::Organic,
-            Default::default()
+            AdvancedMaterialType::Leather,
+            AdvancedMaterialProperties::default()
         )?;
         materials.push(EnhancedMaterial {
             material_type: "skin".to_string(),
             advanced_material: skin_material,
-            interaction_map: self.material_system.get_material_interactions(&AdvancedMaterialType::Organic)?,
+            interaction_map: self.material_system.get_material_interactions(&AdvancedMaterialType::Leather),
         });
 
-        // Generate clothing materials
+        // Generate clothing materials (using Cotton as fabric material)
         for clothing_item in &params.clothing {
             let clothing_material = self.material_system.create_advanced_material(
-                AdvancedMaterialType::Fabric,
-                Default::default()
+                AdvancedMaterialType::Cotton,
+                AdvancedMaterialProperties::default()
             )?;
             materials.push(EnhancedMaterial {
                 material_type: clothing_item.clone(),
                 advanced_material: clothing_material,
-                interaction_map: self.material_system.get_material_interactions(&AdvancedMaterialType::Fabric)?,
+                interaction_map: self.material_system.get_material_interactions(&AdvancedMaterialType::Cotton),
             });
         }
 
@@ -463,15 +470,15 @@ impl EnhancedProceduralEngine {
 
         // Generate primary terrain material
         let primary_material = match params.terrain_type {
-            TerrainType::Mountains => AdvancedMaterialType::Stone,
-            TerrainType::Desert => AdvancedMaterialType::Sand,
-            TerrainType::Forest => AdvancedMaterialType::Soil,
-            TerrainType::Plains => AdvancedMaterialType::Grass,
+            TerrainType::Mountains => AdvancedMaterialType::Granite,  // Stone → Granite
+            TerrainType::Desert => AdvancedMaterialType::Sandstone,   // Sand → Sandstone
+            TerrainType::Forest => AdvancedMaterialType::Oak,         // Soil → Oak (forest material)
+            TerrainType::Plains => AdvancedMaterialType::Bamboo,      // Grass → Bamboo (plains material)
             TerrainType::Arctic => AdvancedMaterialType::Ice,
-            TerrainType::Ocean => AdvancedMaterialType::Water,
+            TerrainType::Ocean => AdvancedMaterialType::Liquid,       // Water → Liquid
         };
 
-        let material = self.material_system.create_advanced_material(primary_material, Default::default())?;
+        let material = self.material_system.create_advanced_material(primary_material, AdvancedMaterialProperties::default())?;
         materials.push(TerrainMaterial {
             material_type: "primary".to_string(),
             advanced_material: material,
@@ -511,7 +518,7 @@ impl EnhancedProceduralEngine {
         Ok(vec![EnhancedMaterial {
             material_type: params.object_type.clone(),
             advanced_material: material,
-            interaction_map: self.material_system.get_material_interactions(&params.advanced_material_type)?,
+            interaction_map: self.material_system.get_material_interactions(&params.advanced_material_type),  // Removed ?
         }])
     }
 
@@ -531,12 +538,27 @@ impl EnhancedProceduralEngine {
         let mut elements = Vec::new();
 
         for interactive_element in &template.interactive_elements {
+            // Convert InteractiveElementType enum to String
+            let element_type_str = format!("{:?}", interactive_element.element_type);
+
+            // Extract activation method from properties or use default
+            let activation_method = interactive_element.properties
+                .get("activation_method")
+                .cloned()
+                .unwrap_or_else(|| "click".to_string());
+
+            // Extract functionality from properties or derive from triggers/actions
+            let functionality = interactive_element.properties
+                .get("functionality")
+                .cloned()
+                .unwrap_or_else(|| format!("{} interactive element", element_type_str));
+
             elements.push(GeneratedInteractiveElement {
                 element_id: interactive_element.id.clone(),
-                element_type: interactive_element.element_type.clone(),
+                element_type: element_type_str,
                 position: interactive_element.position,
-                activation_method: interactive_element.activation_method.clone(),
-                functionality: interactive_element.functionality.clone(),
+                activation_method,
+                functionality,
             });
         }
 
@@ -746,6 +768,19 @@ pub struct EnhancedGeneratedCharacter {
     pub generation_metadata: GenerationMetadata,
 }
 
+impl EnhancedGeneratedCharacter {
+    pub fn default() -> Self {
+        Self {
+            base_character: GeneratedCharacter::default(),
+            enhanced_materials: Vec::new(),
+            ml_enhancements: MLCharacterEnhancements::default(),
+            contextual_details: ContextualCharacterDetails::default(),
+            multi_scale_details: MultiScaleCharacterDetails::default(),
+            generation_metadata: GenerationMetadata::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EnhancedGeneratedEnvironment {
     pub base_environment: GeneratedEnvironment,
@@ -757,6 +792,20 @@ pub struct EnhancedGeneratedEnvironment {
     pub generation_metadata: GenerationMetadata,
 }
 
+impl EnhancedGeneratedEnvironment {
+    pub fn default() -> Self {
+        Self {
+            base_environment: GeneratedEnvironment::default(),
+            enhanced_terrain: EnhancedTerrain::default(),
+            biome_features: BiomeFeatures::default(),
+            ml_distribution: MLEnvironmentDistribution::default(),
+            terrain_materials: Vec::new(),
+            contextual_features: ContextualEnvironmentFeatures::default(),
+            generation_metadata: GenerationMetadata::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EnhancedGeneratedObject {
     pub base_object: GeneratedObject,
@@ -764,6 +813,18 @@ pub struct EnhancedGeneratedObject {
     pub algorithmic_details: AlgorithmicObjectDetails,
     pub ml_optimization: MLObjectOptimization,
     pub generation_metadata: GenerationMetadata,
+}
+
+impl EnhancedGeneratedObject {
+    pub fn default() -> Self {
+        Self {
+            base_object: GeneratedObject::default(),
+            enhanced_materials: Vec::new(),
+            algorithmic_details: AlgorithmicObjectDetails::default(),
+            ml_optimization: MLObjectOptimization::default(),
+            generation_metadata: GenerationMetadata::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -774,6 +835,19 @@ pub struct EnhancedGeneratedSurface {
     pub detail_textures: MultiScaleTextures,
     pub surface_patterns: SurfacePatterns,
     pub generation_metadata: GenerationMetadata,
+}
+
+impl EnhancedGeneratedSurface {
+    pub fn default() -> Self {
+        Self {
+            base_surface: GeneratedSurface::default(),
+            advanced_material: crate::engine::world::AdvancedMaterialType::default(),
+            weathering_effects: WeatheringEffects::default(),
+            detail_textures: MultiScaleTextures::default(),
+            surface_patterns: SurfacePatterns::default(),
+            generation_metadata: GenerationMetadata::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -804,6 +878,17 @@ pub struct GenerationMetadata {
     pub memory_usage: usize,
 }
 
+impl Default for GenerationMetadata {
+    fn default() -> Self {
+        Self {
+            generation_time: 0.0,
+            algorithms_used: Vec::new(),
+            quality_score: 0.0,
+            memory_usage: 0,
+        }
+    }
+}
+
 
 
 #[derive(Debug, Clone)]
@@ -822,6 +907,16 @@ pub struct WeatheringEffects {
     pub oxidation_level: f32,
     pub wear_patterns: Vec<WearPattern>,
     pub environmental_staining: f32,
+}
+
+impl Default for WeatheringEffects {
+    fn default() -> Self {
+        Self {
+            oxidation_level: 0.0,
+            wear_patterns: Vec::new(),
+            environmental_staining: 0.0,
+        }
+    }
 }
 
 
@@ -909,6 +1004,10 @@ impl GenerationMetrics {
 
     pub fn record_surface_generation(&mut self, time: f32) {
         self.surface_generation_times.push(time);
+    }
+
+    pub fn get_character_generation_times(&self) -> &[f32] {
+        &self.character_generation_times
     }
 
     pub fn update(&mut self, _delta_time: f32) {

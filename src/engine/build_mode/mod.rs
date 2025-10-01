@@ -643,7 +643,9 @@ impl EngineerBuildMode {
 
     /// Get enhanced templates by category
     pub fn get_enhanced_templates_by_category(&self, category: TemplateCategory) -> Vec<&EnhancedTemplate> {
-        self.enhanced_template_library.get_templates_by_category(category)
+        self.enhanced_template_library.get_templates_by_category(&category)
+            .map(|templates| templates.iter().collect())
+            .unwrap_or_else(Vec::new)
     }
 
     /// Get featured enhanced templates
@@ -654,6 +656,9 @@ impl EngineerBuildMode {
     /// Apply enhanced template at position
     pub fn apply_enhanced_template(&mut self, template_id: &str, position: Vec3, variation_id: Option<&str>) -> RobinResult<()> {
         if let Some(template) = self.enhanced_template_library.get_template(template_id) {
+            // Clone template name to avoid borrow conflict
+            let template_name = template.name.clone();
+
             // Create build action for applying template
             let action = BuildAction::CreateObject {
                 object_id: rand::random(),
@@ -664,7 +669,7 @@ impl EngineerBuildMode {
             self.add_history_action(action);
 
             // TODO: Implement actual template application with voxel placement
-            log::info!("Applied enhanced template '{}' at position {:?}", template.name, position);
+            log::info!("Applied enhanced template '{}' at position {:?}", template_name, position);
 
             if let Some(var_id) = variation_id {
                 log::info!("Using template variation: {}", var_id);
@@ -672,10 +677,9 @@ impl EngineerBuildMode {
 
             Ok(())
         } else {
-            Err(crate::engine::error::RobinError::ResourceNotFound {
-                resource_type: "EnhancedTemplate".to_string(),
-                resource_id: template_id.to_string(),
-            })
+            Err(crate::engine::error::RobinError::ResourceNotFound(
+                format!("EnhancedTemplate with id '{}' not found", template_id)
+            ))
         }
     }
 

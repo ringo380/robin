@@ -96,7 +96,10 @@ impl CollaborationEngine {
         let session_id = Uuid::new_v4();
         let now = SystemTime::now();
 
-        // Create shared world for collaboration
+        // Create permissions FIRST before moving any fields
+        let permissions = self.create_session_permissions(&params);
+
+        // Create shared world for collaboration (move params.base_world after permissions)
         let world = if let Some(existing_world) = params.base_world {
             existing_world
         } else {
@@ -109,19 +112,22 @@ impl CollaborationEngine {
             }
         };
 
-        // Create session
-        // Calculate values before moving any parts of params
+        // Now extract all fields after borrowing is complete
+        let name = params.name;
+        let description = params.description.unwrap_or_default();
+        let host_id = params.host_id;
+        let max_participants = params.max_participants.unwrap_or(self.config.default_max_participants);
+        let session_type = params.session_type;
         let settings = params.settings.unwrap_or_default();
-        let permissions = self.create_session_permissions(&params);
 
         let session = CollaborationSession {
             id: session_id,
-            name: params.name,
-            description: params.description.unwrap_or_default(),
-            host_id: params.host_id,
+            name,
+            description,
+            host_id,
             participants: HashSet::new(),
-            max_participants: params.max_participants.unwrap_or(self.config.default_max_participants),
-            session_type: params.session_type,
+            max_participants,
+            session_type,
             world: Arc::new(RwLock::new(world)),
             creation_time: now,
             last_activity: now,
@@ -160,75 +166,93 @@ impl CollaborationEngine {
 
     /// Join a collaboration session
     pub async fn join_session(&mut self, user_id: Uuid, session_id: Uuid, invite_code: Option<String>) -> RobinResult<SessionJoinInfo> {
-        let session = self.sessions.get_mut(&session_id)
-            .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
+        // Extract all needed data from session in a single scope to drop the borrow early
+        let (role, permissions) = {
+            let session = self.sessions.get_mut(&session_id)
+                .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
 
-        // Check session status
-        if session.status != SessionStatus::Active {
-            return Err(RobinError::Community("Session is not active".to_string()));
-        }
-
-        // Check capacity
-        if session.participants.len() >= session.max_participants {
-            return Err(RobinError::Community("Session is full".to_string()));
-        }
-
-        // Check invite code if required
-        if session.settings.require_invite && session.host_id != user_id {
-            match (invite_code.as_ref(), session.settings.invite_code.as_ref()) {
-                (Some(provided), Some(required)) if provided == required => {},
-                (None, None) => {},
-                _ => return Err(RobinError::Community("Invalid or missing invite code".to_string())),
+            // Check session status
+            if session.status != SessionStatus::Active {
+                return Err(RobinError::Community("Session is not active".to_string()));
             }
-        }
 
-        // Calculate role inline to avoid borrow conflicts
-        let role = if user_id == session.host_id {
-            ParticipantRole::Host
-        } else {
-            ParticipantRole::Builder
-        };
+            // Check capacity
+            if session.participants.len() >= session.max_participants {
+                return Err(RobinError::Community("Session is full".to_string()));
+            }
+
+            // Check invite code if required
+            if session.settings.require_invite && session.host_id != user_id {
+                match (invite_code.as_ref(), session.settings.invite_code.as_ref()) {
+                    (Some(provided), Some(required)) if provided == required => {},
+                    (None, None) => {},
+                    _ => return Err(RobinError::Community("Invalid or missing invite code".to_string())),
+                }
+            }
+
+            // Calculate role inline to avoid borrow conflicts
+            let role = if user_id == session.host_id {
+                ParticipantRole::Host
+            } else {
+                ParticipantRole::Builder
+            };
+
+            (role, session.permissions.clone())
+        }; // session borrow is dropped here
 
         // Check permissions
-        if !self.permission_manager.can_join_session(&session.permissions, user_id, role) {
+        if !self.permission_manager.can_join_session(&permissions, user_id, role) {
             return Err(RobinError::Community("Insufficient permissions to join session".to_string()));
         }
 
-        // Add participant
+        // Add participant (now self can be borrowed mutably again)
         self.add_participant_to_session(session_id, user_id, role).await?;
 
-        // Get current world state for synchronization
-        let world_snapshot = {
-            let world = session.world.read().await;
-            // TODO: Implement proper snapshot serialization
-            // For now, just create a basic serialization
-            let snapshot = crate::engine::collaboration::version_control::WorldSnapshot {
-                voxel_data: HashMap::new(), // Would need to iterate through world to populate
-                structures: HashMap::new(),
-                terrain_modifications: Vec::new(),
-                captured_at: SystemTime::now(),
+        // Get session again and extract all needed data
+        let join_info = {
+            let session = self.sessions.get_mut(&session_id)
+                .ok_or_else(|| RobinError::Community("Session not found after join".to_string()))?;
+
+            // Get current world state for synchronization
+            let world_snapshot = {
+                let world = session.world.read().await;
+                // TODO: Implement proper snapshot serialization
+                // For now, just create a basic serialization
+                let snapshot = crate::engine::collaboration::version_control::WorldSnapshot {
+                    voxel_data: HashMap::new(), // Would need to iterate through world to populate
+                    structures: HashMap::new(),
+                    terrain_modifications: Vec::new(),
+                    captured_at: SystemTime::now(),
+                };
+                bincode::serialize(&snapshot)
+                    .map_err(|e| RobinError::Community(format!("Failed to serialize snapshot: {}", e)))?
             };
-            bincode::serialize(&snapshot)
-                .map_err(|e| RobinError::Community(format!("Failed to serialize snapshot: {}", e)))?
-        };
 
-        let join_info = SessionJoinInfo {
-            session_id,
-            world_snapshot,
-            current_participants: session.participants.clone(),
-            session_settings: session.settings.clone(),
-            your_role: role,
-            build_permissions: session.permissions.clone(),
-        };
+            let participant_count = session.participants.len();
 
-        // Update activity
-        session.last_activity = SystemTime::now();
+            let info = SessionJoinInfo {
+                session_id,
+                world_snapshot,
+                current_participants: session.participants.clone(),
+                session_settings: session.settings.clone(),
+                your_role: role,
+                build_permissions: session.permissions.clone(),
+            };
+
+            // Update activity
+            session.last_activity = SystemTime::now();
+
+            info
+        }; // session borrow dropped here
 
         // Broadcast join event
+        let participant_count = self.sessions.get(&session_id)
+            .map(|s| s.participants.len())
+            .unwrap_or(0);
         let event = CollaborationEvent::UserJoined {
             session_id,
             user_id,
-            participant_count: session.participants.len(),
+            participant_count,
         };
         self.broadcast_event(event);
 
@@ -289,13 +313,19 @@ impl CollaborationEngine {
             .ok_or_else(|| RobinError::Community("User not in any session".to_string()))?;
 
         let session_id = *session_id;
+
+        // Check build permissions first with immutable borrow
+        {
+            let session = self.sessions.get(&session_id)
+                .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
+            if !self.can_user_build(user_id, session, &change)? {
+                return Err(RobinError::Community("Insufficient build permissions".to_string()));
+            }
+        }
+
+        // Now get mutable access for applying changes
         let session = self.sessions.get_mut(&session_id)
             .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
-
-        // Check build permissions
-        if !self.can_user_build(user_id, session, &change)? {
-            return Err(RobinError::Community("Insufficient build permissions".to_string()));
-        }
 
         // Apply change to shared world
         {
@@ -401,46 +431,50 @@ impl CollaborationEngine {
 
     /// Create checkpoint (save state)
     pub async fn create_checkpoint(&mut self, session_id: Uuid, created_by: Uuid, name: String) -> RobinResult<Uuid> {
-        let session = self.sessions.get_mut(&session_id)
-            .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
-
-        // Check permissions
-        let participant = session.participants.iter().find(|p| p.user_id == created_by)
-            .ok_or_else(|| RobinError::Community("User not in session".to_string()))?;
-
-        if !matches!(participant.role, ParticipantRole::Host | ParticipantRole::CoHost) {
-            return Err(RobinError::Community("Only hosts can create checkpoints".to_string()));
-        }
-
-        // Create world snapshot
-        let world_data = {
-            let world = session.world.read().await;
-            world.serialize()? // TODO: Implement world serialization
-        };
-
         let checkpoint_id = Uuid::new_v4();
-        let checkpoint = SessionCheckpoint {
-            id: checkpoint_id,
-            name,
-            created_by,
-            created_at: SystemTime::now(),
-            world_data,
-            description: format!("Checkpoint created during session '{}'", session.name),
-        };
+        let checkpoint_name;
 
-        session.checkpoints.push(checkpoint);
+        {
+            let session = self.sessions.get_mut(&session_id)
+                .ok_or_else(|| RobinError::Community("Session not found".to_string()))?;
+
+            // Check permissions
+            let participant = session.participants.iter().find(|p| p.user_id == created_by)
+                .ok_or_else(|| RobinError::Community("User not in session".to_string()))?;
+
+            if !matches!(participant.role, ParticipantRole::Host | ParticipantRole::CoHost) {
+                return Err(RobinError::Community("Only hosts can create checkpoints".to_string()));
+            }
+
+            // Create world snapshot
+            let world_data = {
+                let _world = session.world.read().await;
+                Vec::new() // TODO: Implement world serialization
+            };
+
+            let checkpoint = SessionCheckpoint {
+                id: checkpoint_id,
+                name: name.clone(),
+                created_by,
+                created_at: SystemTime::now(),
+                world_data,
+                description: format!("Checkpoint created during session '{}'", session.name),
+            };
+
+            session.checkpoints.push(checkpoint);
+            checkpoint_name = name;
+        } // session borrow ends here
 
         // Broadcast checkpoint event
         let event = CollaborationEvent::CheckpointCreated {
             session_id,
             checkpoint_id,
             created_by,
-            name: session.checkpoints.last().unwrap().name.clone(),
+            name: checkpoint_name.clone(),
         };
         self.broadcast_event(event);
 
-        log::info!("💾 Created checkpoint '{}' in session {}",
-                  session.checkpoints.last().unwrap().name, session_id);
+        log::info!("💾 Created checkpoint '{}' in session {}", checkpoint_name, session_id);
 
         Ok(checkpoint_id)
     }
@@ -719,7 +753,7 @@ pub struct SessionSummary {
 }
 
 /// Session participant
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct SessionParticipant {
     pub user_id: Uuid,
     pub role: ParticipantRole,
@@ -729,6 +763,21 @@ pub struct SessionParticipant {
     pub current_tool: Option<String>,
     pub cursor_position: Vec3,
     pub is_building: bool,
+}
+
+// Implement Eq and Hash based on user_id only (unique identifier)
+impl PartialEq for SessionParticipant {
+    fn eq(&self, other: &Self) -> bool {
+        self.user_id == other.user_id
+    }
+}
+
+impl Eq for SessionParticipant {}
+
+impl std::hash::Hash for SessionParticipant {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.user_id.hash(state);
+    }
 }
 
 /// Session types
@@ -1205,7 +1254,7 @@ mod tests {
             position: [0, 1, 0],
             old_material: MaterialType::Air,
             new_material: MaterialType::Stone,
-            change_type: crate::engine::world::construction::ChangeType::Place,
+            // change_type: crate::engine::world::construction::ChangeType::Place, // TODO: Add when ChangeType is defined
         };
 
         engine.handle_voxel_change(host_id, change.clone()).await.unwrap();

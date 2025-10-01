@@ -913,7 +913,8 @@ impl GallerySearchIndex {
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Vec<Uuid> {
-        let query_words: Vec<&str> = query.to_lowercase().split_whitespace().collect();
+        let query_lower = query.to_lowercase();
+        let query_words: Vec<&str> = query_lower.split_whitespace().collect();
         let mut submission_scores: HashMap<Uuid, usize> = HashMap::new();
 
         for word in query_words {

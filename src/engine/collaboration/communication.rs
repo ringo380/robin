@@ -7,7 +7,7 @@
 
 use crate::engine::{
     error::{RobinError, RobinResult},
-    math::Vec3,
+    math::{Vec3, InnerSpace},
     collaboration::AnnotationType,
 };
 use serde::{Serialize, Deserialize};
@@ -454,7 +454,7 @@ impl MessageFilters {
         }
     }
 
-    pub fn is_message_allowed(&self, message: &Message) -> bool {
+    pub fn is_message_allowed(&mut self, message: &Message) -> bool {
         // Check message length
         if message.content.len() > 2000 {
             return false;
@@ -471,7 +471,7 @@ impl MessageFilters {
         }
 
         // Check rate limits
-        if let Some(rate_limit) = self.rate_limits.get(&message.sender_id) {
+        if let Some(rate_limit) = self.rate_limits.get_mut(&message.sender_id) {
             if !rate_limit.is_allowed() {
                 return false;
             }

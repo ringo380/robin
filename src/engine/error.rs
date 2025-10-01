@@ -262,7 +262,11 @@ pub enum RobinError {
     GPUMemoryError(String),
     GraphicsError(String),
     ComputeError(String),
-    TemplateError(String),
+    TemplateError {
+        template_id: String,
+        operation: String,
+        reason: String,
+    },
     SystemError(String),
     StudyNotFound(String),
     ResourceLimitExceeded(String),
@@ -284,6 +288,9 @@ pub enum RobinError {
     PermissionDenied(String),
     Expired(String),
     LimitExceeded(String),
+    InvalidGameState(String),
+    ResourceNotFound(String),
+    UnsavedChanges(String),
     Other(String),
 }
 
@@ -549,8 +556,8 @@ impl fmt::Display for RobinError {
             RobinError::ComputeError(reason) => {
                 write!(f, "Compute error: {}", reason)
             }
-            RobinError::TemplateError(reason) => {
-                write!(f, "Template error: {}", reason)
+            RobinError::TemplateError { template_id, operation, .. } => {
+                write!(f, "Template error: {} during {}", template_id, operation)
             }
             RobinError::SystemError(reason) => {
                 write!(f, "System error: {}", reason)
@@ -615,6 +622,12 @@ impl fmt::Display for RobinError {
             RobinError::LimitExceeded(limit) => {
                 write!(f, "Limit exceeded: {}", limit)
             }
+            RobinError::ResourceNotFound(resource) => {
+                write!(f, "Resource not found: {}", resource)
+            }
+            RobinError::UnsavedChanges(details) => {
+                write!(f, "Unsaved changes: {}", details)
+            }
             RobinError::Other(reason) => {
                 write!(f, "Other error: {}", reason)
             }
@@ -638,6 +651,9 @@ impl fmt::Display for RobinError {
             }
             RobinError::GeneralError(reason) => {
                 write!(f, "General error: {}", reason)
+            }
+            RobinError::InvalidGameState(reason) => {
+                write!(f, "Invalid game state: {}", reason)
             }
         }
     }
