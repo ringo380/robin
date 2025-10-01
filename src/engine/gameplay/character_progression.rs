@@ -29,39 +29,43 @@ pub struct AttributeBonus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttributeAllocationResult {
     pub success: bool,
+    pub attribute: CoreAttribute,
+    pub old_value: u32,
     pub new_value: u32,
-    pub derived_changes: HashMap<String, f32>,
+    pub derived_stat_changes: HashMap<String, f32>,
     pub synergy_bonuses: Vec<String>,
+    pub cost: u32,
 }
 
 /// Result of character progression reset
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResetResult {
     pub success: bool,
-    pub points_refunded: u32,
-    pub talents_reset: u32,
-    pub attributes_reset: HashMap<String, u32>,
+    pub reset_type: ResetType,
+    pub refunded_points: HashMap<String, u32>,
+    pub preserved_data: PreservedData,
 }
 
 /// Types of character progression resets
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResetType {
-    AttributesOnly,
-    TalentsOnly,
-    FullReset,
+    Attributes,
+    SkillTrees,
+    BuildingSkills,
+    Complete,
 }
 
 /// Unified character progression system that integrates attributes, skills, and specializations
 #[derive(Debug)]
 pub struct CharacterProgressionManager {
     /// Player attribute management
-    attribute_manager: PlayerAttributeManager,
+    pub attribute_manager: PlayerAttributeManager,
 
     /// Enhanced skill tree system
-    skill_tree_manager: EnhancedSkillManager,
+    pub skill_tree_manager: EnhancedSkillManager,
 
     /// Traditional skill system
-    building_skills: SkillManager,
+    pub building_skills: SkillManager,
 
     /// Progression tracking and analytics
     progression_tracker: ProgressionTracker,
@@ -162,18 +166,21 @@ impl CharacterProgressionManager {
         // Award experience
         let exp_result = self.experience_manager.award_experience(experience_type, amount, player_data)?;
 
-        if let Some(level_up) = exp_result.level_up {
+        if let Some(level_up) = exp_result.level_up.clone() {
+            // Clone level_up for use in calculations
+            let level_up_for_calcs = level_up.clone();
+
             events.push(ProgressionEvent::LevelUp(level_up));
 
             // Award attribute points for level up
-            let attribute_points = self.calculate_attribute_point_reward(level_up.new_level);
+            let attribute_points = self.calculate_attribute_point_reward(level_up_for_calcs.new_level);
             if attribute_points > 0 {
                 self.attribute_manager.award_attribute_points(attribute_points);
                 events.push(ProgressionEvent::AttributePointsAwarded { amount: attribute_points });
             }
 
             // Award talent points for level up
-            let talent_points = self.calculate_talent_point_reward(level_up.new_level, experience_type);
+            let talent_points = self.calculate_talent_point_reward(level_up_for_calcs.new_level, experience_type);
             if talent_points > 0 {
                 self.skill_tree_manager.award_talent_points(BuildingSkill::from_experience_type(experience_type), talent_points);
                 events.push(ProgressionEvent::TalentPointsAwarded {
@@ -204,12 +211,13 @@ impl CharacterProgressionManager {
         let synergy_bonuses = self.synergy_calculator.calculate_attribute_synergies(attribute, result.new_value);
 
         Ok(AttributeAllocationResult {
+            success: true,
             attribute,
             old_value: result.old_value,
             new_value: result.new_value,
             derived_stat_changes: result.derived_stat_changes,
-            synergy_bonuses,
-            cost: result.cost,
+            synergy_bonuses: synergy_bonuses.iter().map(|s| s.name.clone()).collect(),
+            cost: 1, // Standard cost per attribute point
         })
     }
 
@@ -251,8 +259,14 @@ impl CharacterProgressionManager {
             specialization_progress: skill_summary.specializations,
             primary_specialization: skill_summary.primary_specialization,
 
-            // Building skills
-            building_skills: building_skill_summary,
+            // Building skills - convert SkillSummary to SkillLevel
+            building_skills: building_skill_summary.into_iter().map(|(skill, summary)| {
+                (skill, SkillLevel {
+                    level: summary.level,
+                    experience: summary.current_experience,
+                    total_experience: summary.total_experience,
+                })
+            }).collect(),
 
             // Progression metrics
             progression_velocity: progression_summary.velocity,
@@ -277,13 +291,18 @@ impl CharacterProgressionManager {
     pub fn reset_character_progression(&mut self,
                                       reset_type: ResetType,
                                       player_data: &mut PlayerData) -> RobinResult<ResetResult> {
+        // Clone for later use in both match and println
+        let reset_type_for_match = reset_type.clone();
+        let reset_type_for_display = reset_type.clone();
+
         let mut result = ResetResult {
+            success: true,
             reset_type,
             refunded_points: HashMap::new(),
             preserved_data: PreservedData::default(),
         };
 
-        match reset_type {
+        match reset_type_for_match {
             ResetType::Attributes => {
                 let refunded = self.attribute_manager.reset_attributes(player_data)?;
                 result.refunded_points.insert("attribute_points".to_string(), refunded as u32);
@@ -323,7 +342,7 @@ impl CharacterProgressionManager {
             &self.building_skills
         );
 
-        println!("🔄 Character progression reset: {:?}", reset_type);
+        println!("🔄 Character progression reset: {:?}", reset_type_for_display);
         Ok(result)
     }
 
@@ -331,12 +350,12 @@ impl CharacterProgressionManager {
     pub fn apply_equipment_effects(&mut self, equipment: &EquipmentSet) -> RobinResult<()> {
         // Apply attribute modifiers
         for modifier in &equipment.attribute_modifiers {
-            self.attribute_manager.apply_equipment_modifier(*modifier)?;
+            self.attribute_manager.apply_equipment_modifier(modifier.clone())?;
         }
 
         // Apply skill bonuses
         for bonus in &equipment.skill_bonuses {
-            self.apply_skill_bonus(*bonus)?;
+            self.apply_skill_bonus(bonus.clone())?;
         }
 
         // Apply experience modifiers
@@ -410,15 +429,20 @@ impl CharacterProgressionManager {
     /// Apply skill bonuses to attributes
     fn apply_skill_bonuses_to_attributes(&mut self, allocation_result: &SkillAllocationResult) -> RobinResult<()> {
         // Convert skill bonuses to attribute bonuses
-        for bonus in &allocation_result.bonuses_gained {
+        for bonus in &allocation_result.bonuses_applied {
             let attribute_bonus = self.convert_skill_bonus_to_attribute_bonus(bonus);
             if let Some(attr_bonus) = attribute_bonus {
+                let mut modifiers = HashMap::new();
+                modifiers.insert(attr_bonus.attribute, attr_bonus.value as i32);
+
                 self.attribute_manager.apply_temporary_effect(TemporaryEffect {
-                    source: format!("Skill: {}", allocation_result.node_id),
-                    bonuses: vec![attr_bonus],
-                    duration: None, // Permanent from skills
-                    applied_at: std::time::Instant::now(),
-                })?;
+                    id: format!("skill_bonus_{}", allocation_result.node_id),
+                    name: format!("Skill Bonus: {}", allocation_result.node_id),
+                    description: "Bonus from skill allocation".to_string(),
+                    attribute_modifiers: modifiers,
+                    remaining_duration: f32::INFINITY, // Permanent from skills
+                    effect_type: super::player_attributes::EffectType::Buff,
+                });
             }
         }
 
@@ -426,7 +450,7 @@ impl CharacterProgressionManager {
     }
 
     /// Convert skill bonus to attribute bonus
-    fn convert_skill_bonus_to_attribute_bonus(&self, _skill_bonus: &super::skill_tree::SkillBonus) -> Option<AttributeBonus> {
+    fn convert_skill_bonus_to_attribute_bonus(&self, _skill_bonus: &super::skill_tree::AppliedBonus) -> Option<AttributeBonus> {
         // TODO: Implement skill bonus conversion when skill tree bonus types are defined
         // For now, return a basic strength bonus
         Some(AttributeBonus {
@@ -443,16 +467,17 @@ impl CharacterProgressionManager {
                 self.building_skills.apply_bonus(skill, bonus.bonus_amount)?;
             },
             SkillBonusType::Attribute(attr) => {
-                let attr_bonus = AttributeBonus {
-                    attribute: attr,
-                    value: bonus.bonus_amount,
-                };
+                let mut modifiers = HashMap::new();
+                modifiers.insert(attr, bonus.bonus_amount as i32);
+
                 self.attribute_manager.apply_temporary_effect(TemporaryEffect {
-                    source: "Equipment".to_string(),
-                    bonuses: vec![attr_bonus],
-                    duration: None,
-                    applied_at: std::time::Instant::now(),
-                })?;
+                    id: "equipment_bonus".to_string(),
+                    name: "Equipment Bonus".to_string(),
+                    description: "Bonus from equipped items".to_string(),
+                    attribute_modifiers: modifiers,
+                    remaining_duration: f32::INFINITY,
+                    effect_type: super::player_attributes::EffectType::Buff,
+                });
             },
         }
 
@@ -575,9 +600,9 @@ impl CharacterProgressionManager {
         // Simulate increasing the attribute by 1
         let simulated_improvement = match attribute {
             CoreAttribute::Strength => current_stats.carry_capacity * 0.1 + current_stats.max_health * 0.02,
-            CoreAttribute::Dexterity => current_stats.movement_speed * 0.1 + current_stats.attack_speed * 0.02,
-            CoreAttribute::Intelligence => current_stats.max_mana * 0.06 + current_stats.experience_gain * 0.01,
-            CoreAttribute::Vitality => current_stats.max_health * 0.1 + current_stats.health_regen_rate * 0.1,
+            CoreAttribute::Dexterity => current_stats.movement_speed * 0.1 + current_stats.building_speed * 0.02,
+            CoreAttribute::Intelligence => current_stats.max_mana * 0.06 + current_stats.xp_gain_multiplier * 0.01,
+            CoreAttribute::Vitality => current_stats.max_health * 0.1 + current_stats.max_stamina * 0.1,
             _ => 10.0, // Default benefit value
         };
 
@@ -671,45 +696,50 @@ impl ExperienceManager {
 
             // Save to player data
             let key = format!("exp_{:?}", exp_type).to_lowercase();
-            player_data.stats.custom_stats.insert(key, pool.current_experience as f32);
+            player_data.stats.custom_stats.insert(key, pool.current_experience as f64);
         }
 
         // Update overall level
         let total_exp = self.get_total_experience();
-        let new_overall_level = self.level_curve.calculate_level(total_exp);
+        let new_overall_level = self.level_curve.calculate_level(total_exp) as u32;
         if new_overall_level != self.overall_level {
             self.overall_level = new_overall_level;
-            player_data.stats.custom_stats.insert("overall_level".to_string(), self.overall_level as f32);
+            player_data.stats.custom_stats.insert("overall_level".to_string(), self.overall_level as f64);
         }
 
         Ok(())
     }
 
     pub fn award_experience(&mut self, exp_type: ExperienceType, amount: u32, player_data: &mut PlayerData) -> RobinResult<ExperienceResult> {
-        let pool = self.experience_pools.get_mut(&exp_type)
-            .ok_or_else(|| crate::engine::error::RobinError::InvalidInput(format!("Unknown experience type: {:?}", exp_type)))?;
+        // Scope the mutable borrow to end before get_total_experience()
+        let (old_experience, new_experience, level_up, final_amount) = {
+            let pool = self.experience_pools.get_mut(&exp_type)
+                .ok_or_else(|| crate::engine::error::RobinError::InvalidInput(format!("Unknown experience type: {:?}", exp_type)))?;
 
-        let old_level = pool.level;
-        let old_experience = pool.current_experience;
+            let old_level = pool.level;
+            let old_experience = pool.current_experience;
 
-        // Apply multipliers
-        let multiplier = self.multipliers.get(&exp_type).copied().unwrap_or(1.0);
-        let final_amount = (amount as f32 * multiplier) as u32;
+            // Apply multipliers
+            let multiplier = self.multipliers.get(&exp_type).copied().unwrap_or(1.0);
+            let final_amount = (amount as f32 * multiplier) as u32;
 
-        // Add experience
-        pool.current_experience += final_amount;
-        pool.level = self.level_curve.calculate_level(pool.current_experience);
+            // Add experience
+            pool.current_experience += final_amount;
+            pool.level = self.level_curve.calculate_level(pool.current_experience);
 
-        // Check for level up
-        let level_up = if pool.level > old_level {
-            Some(LevelUpResult {
-                experience_type: exp_type,
-                old_level,
-                new_level: pool.level,
-                experience_gained: final_amount,
-            })
-        } else {
-            None
+            // Check for level up
+            let level_up = if pool.level > old_level {
+                Some(LevelUpResult {
+                    experience_type: exp_type,
+                    old_level,
+                    new_level: pool.level,
+                    experience_gained: final_amount,
+                })
+            } else {
+                None
+            };
+
+            (old_experience, pool.current_experience, level_up, final_amount)
         };
 
         // Update overall level
@@ -721,7 +751,7 @@ impl ExperienceManager {
             experience_type: exp_type,
             experience_gained: final_amount,
             old_experience,
-            new_experience: pool.current_experience,
+            new_experience,
             level_up,
             total_level: self.overall_level,
             level_up_overall: self.overall_level > old_overall_level,
@@ -1032,7 +1062,7 @@ impl BuildingSkill {
             ExperienceType::Building => BuildingSkill::Construction,
             ExperienceType::Engineering => BuildingSkill::Engineering,
             ExperienceType::Crafting => BuildingSkill::Crafting,
-            ExperienceType::Research => BuildingSkill::Research,
+            ExperienceType::Research => BuildingSkill::Architecture, // Research maps to Architecture
             _ => BuildingSkill::Construction, // Default fallback
         }
     }
@@ -1126,7 +1156,7 @@ pub enum RecommendationType {
 
 // Removed duplicate ResetType and ResetResult - already defined at the top
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PreservedData {
     pub level: Option<u32>,
     pub milestones: Option<Vec<Milestone>>,
@@ -1134,7 +1164,7 @@ pub struct PreservedData {
 
 #[derive(Debug)]
 pub struct EquipmentSet {
-    pub attribute_modifiers: Vec<super::player_attributes::AttributeBonus>,
+    pub attribute_modifiers: Vec<AttributeBonus>,
     pub skill_bonuses: Vec<SkillBonus>,
     pub experience_modifiers: Vec<ExperienceModifier>,
 }
@@ -1381,7 +1411,7 @@ impl SynergyCalculator {
     pub fn get_synergy_summary(&self) -> SynergySummary { SynergySummary::default() }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Milestone {
     pub name: String,
     pub description: String,

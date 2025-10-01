@@ -13,6 +13,7 @@ use crate::engine::{
     math::Vec3,
     gameplay::{
         BlueprintManager, Blueprint,
+        blueprint_system::{StructureData, MaterialRequirements, IPos3},
         resources::ResourceType,
     },
 };
@@ -37,10 +38,10 @@ pub struct AutomatedBuildingManager {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerrainAnalyzer {
     pub height_maps: HashMap<String, TerrainHeightMap>,
-    pub stability_analysis: HashMap<Vec3, StabilityRating>,
+    pub stability_analysis: HashMap<String, StabilityRating>, // Changed from Vec3 to String for HashMap key
     pub geological_surveys: HashMap<String, GeologicalSurvey>,
     pub foundation_recommendations: HashMap<String, FoundationPlan>,
-    pub environmental_factors: HashMap<Vec3, EnvironmentalConditions>,
+    pub environmental_factors: HashMap<String, EnvironmentalConditions>, // Changed from Vec3 to String for HashMap key
 }
 
 /// Smart material sourcing and logistics automation
@@ -111,13 +112,13 @@ pub struct AutomatedProject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerrainHeightMap {
     pub area_id: String,
-    pub height_data: HashMap<Vec3, f32>,
-    pub slope_analysis: HashMap<Vec3, f32>,
+    pub height_data: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
+    pub slope_analysis: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
     pub drainage_patterns: Vec<DrainagePattern>,
-    pub soil_composition: HashMap<Vec3, SoilType>,
-    pub bedrock_depth: HashMap<Vec3, f32>,
-    pub vegetation_density: HashMap<Vec3, f32>,
-    pub accessibility_rating: HashMap<Vec3, f32>,
+    pub soil_composition: HashMap<String, SoilType>, // Changed from Vec3 to String for HashMap key
+    pub bedrock_depth: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
+    pub vegetation_density: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
+    pub accessibility_rating: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
 }
 
 /// Geological survey for foundation planning
@@ -128,8 +129,8 @@ pub struct GeologicalSurvey {
     pub soil_layers: Vec<SoilLayer>,
     pub rock_formations: Vec<RockFormation>,
     pub water_table_depth: f32,
-    pub stability_zones: HashMap<Vec3, StabilityZone>,
-    pub load_bearing_capacity: HashMap<Vec3, f32>,
+    pub stability_zones: HashMap<String, StabilityZone>, // Changed from Vec3 to String for HashMap key
+    pub load_bearing_capacity: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
     pub recommended_foundations: Vec<FoundationType>,
     pub environmental_concerns: Vec<EnvironmentalConcern>,
 }
@@ -139,7 +140,7 @@ pub struct GeologicalSurvey {
 pub struct FoundationPlan {
     pub plan_id: String,
     pub foundation_type: FoundationType,
-    pub depth_requirements: HashMap<Vec3, f32>,
+    pub depth_requirements: HashMap<String, f32>, // Changed from Vec3 to String for HashMap key
     pub reinforcement_specs: Vec<ReinforcementSpec>,
     pub drainage_systems: Vec<DrainageSystem>,
     pub load_distribution: LoadDistribution,
@@ -259,7 +260,7 @@ pub enum AutomationLevel {
     Adaptive,         // Learns user preferences
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConstructionPhase {
     Planning,
     SitePreparation,
@@ -429,7 +430,7 @@ pub struct ReinforcementSpec { pub spec_id: String, pub material_type: ResourceT
 pub struct DrainageSystem { pub system_type: String, pub components: Vec<String> }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoadDistribution { pub load_points: HashMap<Vec3, f32>, pub distribution_pattern: String }
+pub struct LoadDistribution { pub load_points: HashMap<String, f32>, pub distribution_pattern: String } // Changed from Vec3 to String for HashMap key
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoundationStep { pub step_id: String, pub description: String, pub duration: Duration }
@@ -664,8 +665,29 @@ impl AutomatedBuildingManager {
         self.smart_assistant.update_learning_systems(delta_time)?;
 
         // Update all active automated projects
-        for project in self.active_projects.values_mut() {
-            self.update_project_progress(project, delta_time)?;
+        // Collect project IDs first to avoid borrowing self while iterating
+        let project_ids: Vec<String> = self.active_projects.keys().cloned().collect();
+        for project_id in project_ids {
+            // Calculate drone progress without holding project borrow
+            let drone_progress = if let Some(project) = self.active_projects.get(&project_id) {
+                self.construction_drones.calculate_project_progress(&project.assigned_drones)?
+            } else {
+                continue;
+            };
+
+            // Now update the project with calculated values
+            if let Some(project) = self.active_projects.get_mut(&project_id) {
+                // Update overall completion
+                project.progress_tracking.overall_completion =
+                    (project.progress_tracking.overall_completion + drone_progress * delta_time).min(1.0);
+
+                // Check for phase transitions
+                if project.progress_tracking.overall_completion > 0.8 &&
+                   project.current_phase == ConstructionPhase::Structure {
+                    project.current_phase = ConstructionPhase::Finishing;
+                    println!("🏗️ Project '{}' advancing to finishing phase", project.project_name);
+                }
+            }
         }
 
         Ok(())
@@ -697,6 +719,10 @@ impl AutomatedBuildingManager {
 
         // Assign construction drones based on project needs
         let assigned_drones = self.assign_optimal_drone_fleet(&construction_plan, automation_level.clone())?;
+
+        // Clone values needed after the move for logging
+        let project_name_display = project_name.clone();
+        let drone_count = assigned_drones.len();
 
         // Create automated project
         let project_id = format!("automated_project_{}", Uuid::new_v4());
@@ -733,7 +759,7 @@ impl AutomatedBuildingManager {
             .or_insert(1.0);
 
         println!("🏗️ Automated construction project '{}' started with {} drones assigned",
-                project_name, assigned_drones.len());
+                project_name_display, drone_count);
 
         Ok(project_id)
     }
@@ -741,12 +767,12 @@ impl AutomatedBuildingManager {
     /// Get intelligent terrain analysis for construction site
     pub fn analyze_construction_site(&mut self,
                                    site_location: Vec3,
-                                   structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<SiteAnalysis> {
+                                   structure_data: &StructureData) -> RobinResult<SiteAnalysis> {
 
         // Perform comprehensive terrain analysis
-        let terrain_suitability = self.terrain_analyzer.assess_terrain_suitability(site_location, structure_data)?;
+        let terrain_suitability = self.terrain_analyzer.assess_terrain_suitability(site_location, &structure_data.voxels)?;
         let accessibility_rating = self.terrain_analyzer.calculate_accessibility(site_location)?;
-        let environmental_impact = self.terrain_analyzer.assess_environmental_impact(site_location, structure_data)?;
+        let environmental_impact = self.terrain_analyzer.assess_environmental_impact(site_location, &structure_data.voxels)?;
 
         // Check regulatory compliance (simulated)
         let regulatory_compliance = 0.95; // High compliance rating
@@ -755,7 +781,7 @@ impl AutomatedBuildingManager {
         let infrastructure_availability = self.terrain_analyzer.assess_infrastructure(site_location)?;
 
         // Calculate construction complexity
-        let construction_complexity = self.optimization_engine.calculate_construction_complexity(structure_data)?;
+        let construction_complexity = self.optimization_engine.calculate_construction_complexity(&structure_data.voxels)?;
 
         Ok(SiteAnalysis {
             terrain_suitability,
@@ -883,10 +909,10 @@ impl AutomatedBuildingManager {
         ];
 
         // Generate task dependencies using AI
-        let task_dependencies = self.optimization_engine.generate_task_dependencies(&blueprint.structure_data)?;
+        let task_dependencies = self.optimization_engine.generate_task_dependencies(&blueprint.structure_data.voxels)?;
 
         // Create resource scheduling
-        let resource_scheduling = self.material_logistics.create_resource_schedule(&blueprint.material_requirements)?;
+        let resource_scheduling = self.material_logistics.create_resource_schedule(blueprint.material_requirements.as_hashmap())?;
 
         // Set up quality gates
         let quality_gates = self.optimization_engine.create_quality_gates(&phases)?;
@@ -895,7 +921,7 @@ impl AutomatedBuildingManager {
         let risk_mitigation = self.smart_assistant.generate_risk_mitigation_strategies(site_analysis)?;
 
         // Create contingency plans
-        let contingencies = self.smart_assistant.create_contingency_plans(&blueprint.structure_data)?;
+        let contingencies = self.smart_assistant.create_contingency_plans(&blueprint.structure_data.voxels)?;
 
         Ok(ConstructionPlan {
             phases,
@@ -915,7 +941,7 @@ impl AutomatedBuildingManager {
         let mut required_resources = blueprint.material_requirements.clone();
 
         // Apply material optimization suggestions
-        let optimizations = self.material_logistics.get_material_optimizations(&required_resources)?;
+        let optimizations = self.material_logistics.get_material_optimizations(required_resources.as_hashmap())?;
         for optimization in optimizations {
             if let Some(quantity) = required_resources.get_mut(&optimization.original_material) {
                 *quantity = (*quantity as f32 * optimization.efficiency_factor) as u32;
@@ -928,7 +954,7 @@ impl AutomatedBuildingManager {
             *quantity = (*quantity as f32 * (1.0 + safety_margin)) as u32;
         }
 
-        Ok(ResourceRequirements { required_resources })
+        Ok(ResourceRequirements { required_resources: required_resources.into_hashmap() })
     }
 
     fn generate_optimized_timeline(&self,
@@ -1096,7 +1122,7 @@ impl TerrainAnalyzer {
 
     pub fn assess_terrain_suitability(&self,
                                     _location: Vec3,
-                                    _structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<f32> {
+                                    _structure_data: &HashMap<IPos3, VoxelType>) -> RobinResult<f32> {
         // Assess terrain suitability for construction
         Ok(0.85) // High suitability rating
     }
@@ -1108,7 +1134,7 @@ impl TerrainAnalyzer {
 
     pub fn assess_environmental_impact(&self,
                                      _location: Vec3,
-                                     _structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<f32> {
+                                     _structure_data: &HashMap<IPos3, VoxelType>) -> RobinResult<f32> {
         // Assess environmental impact of construction
         Ok(0.1) // Low environmental impact
     }
@@ -1276,12 +1302,12 @@ impl ConstructionOptimizer {
         Ok(())
     }
 
-    pub fn calculate_construction_complexity(&self, _structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<f32> {
+    pub fn calculate_construction_complexity(&self, _structure_data: &HashMap<IPos3, VoxelType>) -> RobinResult<f32> {
         // Calculate construction complexity
         Ok(0.6) // Moderate complexity
     }
 
-    pub fn generate_task_dependencies(&self, _structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<HashMap<String, Vec<String>>> {
+    pub fn generate_task_dependencies(&self, _structure_data: &HashMap<IPos3, VoxelType>) -> RobinResult<HashMap<String, Vec<String>>> {
         // Generate intelligent task dependencies
         Ok(HashMap::new())
     }
@@ -1356,7 +1382,7 @@ impl BuildingAssistant {
         Ok(HashMap::new())
     }
 
-    pub fn create_contingency_plans(&self, _structure_data: &HashMap<Vec3, VoxelType>) -> RobinResult<Vec<ContingencyPlan>> {
+    pub fn create_contingency_plans(&self, _structure_data: &HashMap<IPos3, VoxelType>) -> RobinResult<Vec<ContingencyPlan>> {
         // Create contingency plans
         Ok(vec![])
     }

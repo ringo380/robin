@@ -391,15 +391,15 @@ impl ModernInterfaceManager {
     /// Create building interface for interactive tools
     pub fn create_building_interface(&mut self, mode: InteractionMode) -> RobinResult<BuildingInterfaceHandle> {
         // Create specialized building UI layout
-        let layout = self.layout_engine.create_building_layout(mode)?;
+        let layout = self.layout_engine.create_building_layout(&mode)?;
 
         // Setup building-specific components
-        let tool_palette = self.component_library.building_components.create_tool_palette(mode)?;
+        let tool_palette = self.component_library.building_components.create_tool_palette(&mode)?;
         let preview_panel = self.component_library.building_components.create_preview_panel()?;
         let collaboration_panel = self.component_library.building_components.create_collaboration_panel()?;
 
         // Configure gesture feedback
-        self.component_library.building_components.configure_gesture_feedback(mode)?;
+        self.component_library.building_components.configure_gesture_feedback(&mode)?;
 
         // Create interface handle
         let handle = BuildingInterfaceHandle {
@@ -462,12 +462,12 @@ impl ModernInterfaceManager {
         match input.input_type {
             ProcessedInputType::Gesture(ref gesture_data) => {
                 // Convert building gestures to UI actions
-                match gesture_data.gesture_type {
+                match &gesture_data.gesture_type {
                     GestureType::BuildingGesture(building_gesture) => {
-                        self.convert_building_gesture_to_ui_action(building_gesture)
+                        self.convert_building_gesture_to_ui_action(building_gesture.clone())
                     },
                     GestureType::UIGesture(ui_gesture) => {
-                        self.handle_ui_gesture(ui_gesture)
+                        self.handle_ui_gesture(ui_gesture.clone())
                     },
                     _ => Ok(vec![])
                 }
@@ -495,6 +495,8 @@ impl ModernInterfaceManager {
             UIGesture::Pinch(scale) => self.handle_pinch_gesture(scale)?,
             UIGesture::Tap(position) => self.handle_tap_gesture(position)?,
             UIGesture::LongPress(position) => self.handle_long_press_gesture(position)?,
+            UIGesture::Rotate(angle) => self.handle_rotate_gesture(angle)?,
+            UIGesture::Custom(gesture_name) => self.handle_custom_gesture(gesture_name)?,
         };
 
         Ok(actions)
@@ -525,6 +527,18 @@ impl ModernInterfaceManager {
     fn handle_long_press_gesture(&self, position: Point2<f32>) -> RobinResult<Vec<UIAction>> {
         // Show context menu at position
         Ok(vec![UIAction::ShowContextMenu(position)])
+    }
+
+    fn handle_rotate_gesture(&self, angle: f32) -> RobinResult<Vec<UIAction>> {
+        // Rotate the current view or object by the given angle
+        let mut params = HashMap::new();
+        params.insert("angle".to_string(), angle.to_string());
+        Ok(vec![UIAction::Custom("rotate".to_string(), params)])
+    }
+
+    fn handle_custom_gesture(&self, gesture_name: String) -> RobinResult<Vec<UIAction>> {
+        // Handle custom gestures - can be extended by plugins or specific features
+        Ok(vec![UIAction::Custom(gesture_name, HashMap::new())])
     }
 }
 
@@ -1062,15 +1076,15 @@ impl ResponsiveDesignSystem {
         }
     }
 
-    pub fn initialize(&mut self, viewport_size: Vector2<f32>, device_info: DeviceInfo) -> RobinResult<()> {
+    pub fn initialize(&mut self, viewport_size: Vector2<f32>, _device_info: DeviceInfo) -> RobinResult<()> {
         // Update viewport
-        self.viewport_manager.set_viewport(viewport_size);
+        self.viewport_manager.set_viewport(viewport_size.x as u32, viewport_size.y as u32);
 
         // Detect current breakpoint
         self.breakpoints.current_breakpoint = self.detect_breakpoint(viewport_size.x);
 
         // Configure device-specific settings
-        self.device_detection.configure(device_info);
+        self.device_detection.configure();
 
         println!("📱 Responsive Design System initialized for {} breakpoint", self.breakpoints.current_breakpoint);
         Ok(())
@@ -1094,7 +1108,7 @@ impl ResponsiveDesignSystem {
             println!("📱 Breakpoint changed: {} -> {}", old_breakpoint, self.breakpoints.current_breakpoint);
         }
 
-        self.viewport_manager.set_viewport(new_size);
+        self.viewport_manager.set_viewport(new_size.x as u32, new_size.y as u32);
         Ok(())
     }
 
@@ -1130,7 +1144,7 @@ impl ModernComponentLibrary {
 
     pub fn initialize(&mut self, theme_manager: &DynamicThemeManager) -> RobinResult<()> {
         // Initialize components with current theme
-        self.theming_support.apply_theme(theme_manager)?;
+        self.theming_support.apply_theme(theme_manager);
 
         // Setup base components
         self.base_components.initialize(theme_manager)?;
@@ -1156,7 +1170,7 @@ impl ModernComponentLibrary {
     }
 
     pub fn apply_theme(&mut self, theme_manager: &DynamicThemeManager) -> RobinResult<()> {
-        self.theming_support.apply_theme(theme_manager)?;
+        self.theming_support.apply_theme(theme_manager);
         Ok(())
     }
 
@@ -1190,7 +1204,7 @@ macro_rules! impl_ui_placeholder {
 }
 
 impl_ui_placeholder!(
-    ResponsiveGrid, TypographyScale, SpacingSystem, ViewportManager,
+    ResponsiveGrid, TypographyScale, SpacingSystem,
     DeviceDetectionSystem, OrientationHandler, ResponsiveComponent,
     LayoutConstraints, ComponentVariant, BreakpointTransitions, CustomBreakpoint,
 
@@ -1232,10 +1246,88 @@ impl_ui_placeholder!(
 
     UserJourneyManager, OnboardingSystem, InteractiveTutorialEngine,
     ContextualHelpSystem, UserFeedbackSystem, UXAnalyticsSystem,
-    PersonalizationEngine, ProgressiveDisclosureSystem,
-
-    UIPerformanceMonitor
+    PersonalizationEngine, ProgressiveDisclosureSystem
 );
+
+// Manual definitions for types that have custom implementations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewportManager {}
+
+impl ViewportManager {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn set_viewport(&mut self, _width: u32, _height: u32) {
+        // Implement viewport setting
+    }
+}
+
+impl Default for ViewportManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UIPerformanceMonitor {}
+
+// Additional method implementations for placeholder components
+impl DeviceDetectionSystem {
+    pub fn configure(&mut self) {
+        // TODO: Configure device detection settings
+    }
+}
+
+impl ComponentThemingSystem {
+    pub fn apply_theme(&mut self, _theme_manager: &DynamicThemeManager) {
+        // TODO: Apply theme to components using theme manager
+    }
+}
+
+impl BaseComponentSet {
+    pub fn new() -> Self {
+        Self {
+            buttons: ButtonComponentSystem::default(),
+            inputs: InputComponentSystem::default(),
+            containers: ContainerComponents::default(),
+            typography: TypographyComponents::default(),
+            icons: IconSystem::default(),
+            overlays: OverlayComponents::default(),
+            notifications: NotificationSystem::default(),
+            progress_indicators: ProgressComponents::default(),
+        }
+    }
+}
+
+impl BuildingUIComponents {
+    pub fn new() -> Self {
+        Self {
+            tool_palette: ToolPaletteComponent::default(),
+            blueprint_browser: BlueprintBrowserComponent::default(),
+            construction_monitor: ConstructionMonitorComponent::default(),
+            material_inventory: MaterialInventoryComponent::default(),
+            gesture_feedback: GestureFeedbackComponent::default(),
+            collaboration_panel: CollaborationPanelComponent::default(),
+            snapping_indicators: SnappingIndicatorComponent::default(),
+            preview_controls: PreviewControlComponent::default(),
+        }
+    }
+}
+
+impl AdvancedColorSystem {
+    pub fn new() -> Self {
+        Self {
+            semantic_colors: SemanticColorPalette::default(),
+            brand_colors: BrandColorPalette::default(),
+            functional_colors: FunctionalColorPalette::default(),
+            accessibility_colors: AccessibilityColorPalette::default(),
+            dynamic_colors: DynamicColorSystem::default(),
+            color_harmonies: ColorHarmonySystem::default(),
+            contrast_analyzer: ContrastAnalyzer::default(),
+        }
+    }
+}
 
 // Additional method implementations for key components
 impl AccessibilityEngine {
@@ -1398,7 +1490,7 @@ impl AdaptiveLayoutEngine {
         Ok(())
     }
 
-    pub fn create_building_layout(&mut self, _mode: InteractionMode) -> RobinResult<LayoutHandle> {
+    pub fn create_building_layout(&mut self, _mode: &InteractionMode) -> RobinResult<LayoutHandle> {
         Ok(LayoutHandle {
             id: "building_layout".to_string(),
         })
@@ -1635,7 +1727,7 @@ impl BuildingUIComponents {
         Ok(())
     }
 
-    pub fn create_tool_palette(&mut self, _mode: InteractionMode) -> RobinResult<ComponentHandle> {
+    pub fn create_tool_palette(&mut self, _mode: &InteractionMode) -> RobinResult<ComponentHandle> {
         Ok(ComponentHandle { id: "tool_palette".to_string() })
     }
 
@@ -1647,7 +1739,7 @@ impl BuildingUIComponents {
         Ok(ComponentHandle { id: "collaboration_panel".to_string() })
     }
 
-    pub fn configure_gesture_feedback(&mut self, _mode: InteractionMode) -> RobinResult<()> {
+    pub fn configure_gesture_feedback(&mut self, _mode: &InteractionMode) -> RobinResult<()> {
         Ok(())
     }
 

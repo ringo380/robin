@@ -339,6 +339,9 @@ impl Animator {
     pub fn update(&mut self, delta: Duration) -> RobinResult<()> {
         self.completed_animations.clear();
 
+        // Collect animation updates to apply
+        let mut animations_to_update = Vec::new();
+
         for (id, animation) in &mut self.active_animations {
             animation.elapsed = animation.elapsed.saturating_add(delta);
 
@@ -363,7 +366,15 @@ impl Animator {
                 }
             } else {
                 animation.state = AnimationState::Running;
-                self.calculate_animation_value(animation)?;
+                animations_to_update.push(*id);
+            }
+        }
+
+        // Calculate animation values after iterator is dropped
+        for id in animations_to_update {
+            if let Some(animation) = self.active_animations.get(&id) {
+                let animation_clone = animation.clone();
+                self.calculate_animation_value(&animation_clone)?;
             }
         }
 
@@ -785,11 +796,20 @@ macro_rules! define_transition_component {
     };
 }
 
-define_transition_component!(TimelineManager);
 define_transition_component!(Interpolator);
-define_transition_component!(EffectProcessor);
-define_transition_component!(TransitionQueue);
-define_transition_component!(ParallelAnimator);
+
+// Manual definitions for types that have custom implementations
+#[derive(Debug)]
+pub struct TimelineManager;
+
+#[derive(Debug)]
+pub struct EffectProcessor;
+
+#[derive(Debug)]
+pub struct TransitionQueue;
+
+#[derive(Debug)]
+pub struct ParallelAnimator;
 
 // Implement key methods for simplified components
 impl TimelineManager {
