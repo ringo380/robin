@@ -843,45 +843,47 @@ impl AchievementSystem {
         self.achievements.values().collect()
     }
 
-    pub async fn check_criteria(&self, achievement: &Achievement, profile: &UserProfile) -> RobinResult<bool> {
-        match &achievement.criteria {
-            AchievementCriteria::VoxelsPlaced(count) => {
-                Ok(profile.total_voxels_placed >= *count)
-            },
-            AchievementCriteria::ProjectsCreated(count) => {
-                Ok(profile.total_projects_created >= *count)
-            },
-            AchievementCriteria::BuildTime(duration) => {
-                Ok(profile.total_build_time >= *duration)
-            },
-            AchievementCriteria::Level(level) => {
-                Ok(profile.level >= *level)
-            },
-            AchievementCriteria::Collaborations(count) => {
-                Ok(profile.total_collaborations >= *count)
-            },
-            AchievementCriteria::Reputation(points) => {
-                Ok(profile.reputation >= *points)
-            },
-            AchievementCriteria::Multiple(criteria) => {
-                for criterion in criteria {
-                    let temp_achievement = Achievement {
-                        id: String::new(),
-                        name: String::new(),
-                        description: String::new(),
-                        criteria: criterion.clone(),
-                        experience_reward: 0,
-                        badge: None,
-                        category: AchievementCategory::Building,
-                        rarity: AchievementRarity::Common,
-                    };
-                    if !self.check_criteria(&temp_achievement, profile).await? {
-                        return Ok(false);
+    pub fn check_criteria<'a>(&'a self, achievement: &'a Achievement, profile: &'a UserProfile) -> std::pin::Pin<Box<dyn std::future::Future<Output = RobinResult<bool>> + 'a>> {
+        Box::pin(async move {
+            match &achievement.criteria {
+                AchievementCriteria::VoxelsPlaced(count) => {
+                    Ok(profile.total_voxels_placed >= *count)
+                },
+                AchievementCriteria::ProjectsCreated(count) => {
+                    Ok(profile.total_projects_created >= *count)
+                },
+                AchievementCriteria::BuildTime(duration) => {
+                    Ok(profile.total_build_time >= *duration)
+                },
+                AchievementCriteria::Level(level) => {
+                    Ok(profile.level >= *level)
+                },
+                AchievementCriteria::Collaborations(count) => {
+                    Ok(profile.total_collaborations >= *count)
+                },
+                AchievementCriteria::Reputation(points) => {
+                    Ok(profile.reputation >= *points)
+                },
+                AchievementCriteria::Multiple(criteria) => {
+                    for criterion in criteria {
+                        let temp_achievement = Achievement {
+                            id: String::new(),
+                            name: String::new(),
+                            description: String::new(),
+                            criteria: criterion.clone(),
+                            experience_reward: 0,
+                            badge: None,
+                            category: AchievementCategory::Building,
+                            rarity: AchievementRarity::Common,
+                        };
+                        if !self.check_criteria(&temp_achievement, profile).await? {
+                            return Ok(false);
+                        }
                     }
-                }
-                Ok(true)
-            },
-        }
+                    Ok(true)
+                },
+            }
+        })
     }
 
     fn create_default_achievements(&mut self) {
